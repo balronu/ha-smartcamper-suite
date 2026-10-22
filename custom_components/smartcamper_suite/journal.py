@@ -8,7 +8,9 @@ at its storage boundary so Home Assistant can execute it in its executor.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
+import math
 import sqlite3
 import threading
 import uuid
@@ -16,8 +18,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
-JOURNAL_SCHEMA_VERSION = 1
+JOURNAL_SCHEMA_VERSION = 2
 TRIP_STATUSES = {"planned", "active", "completed", "cancelled"}
 EXPENSE_CATEGORIES = {"camping", "fuel", "toll", "parking", "food", "activities", "other"}
 
@@ -28,6 +31,15 @@ def _now() -> str:
 
 def _id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def _distance_m(latitude_a: float, longitude_a: float, latitude_b: float, longitude_b: float) -> float:
+    radius = 6_371_000.0
+    lat_a, lat_b = math.radians(latitude_a), math.radians(latitude_b)
+    delta_lat = math.radians(latitude_b - latitude_a)
+    delta_lon = math.radians(longitude_b - longitude_a)
+    value = math.sin(delta_lat / 2) ** 2 + math.cos(lat_a) * math.cos(lat_b) * math.sin(delta_lon / 2) ** 2
+    return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1 - value)))
 
 
 @dataclass(slots=True)
@@ -85,6 +97,31 @@ class JournalStore:
                   id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle_id TEXT NOT NULL, recorded_at TEXT NOT NULL,
                   latitude REAL NOT NULL, longitude REAL NOT NULL, accuracy_m REAL,
                   UNIQUE(vehicle_id, recorded_at, latitude, longitude)
+                );
+                CREATE TABLE IF NOT EXISTS overnight_details(
+                  place_id TEXT PRIMARY KEY, place_kind TEXT NOT NULL DEFAULT 'other', website_url TEXT,
+                  booking_note TEXT, large_rv_suitable INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                  FOREIGN KEY(place_id) REFERENCES stops(id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS place_ratings(
+                  place_id TEXT PRIMARY KEY, overall INTEGER NOT NULL, large_rv_access INTEGER,
+                  space_maneuvering INTEGER, facilities INTEGER, surroundings INTEGER,
+                  review_text TEXT NOT NULL DEFAULT '', rated_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                  FOREIGN KEY(place_id) REFERENCES stops(id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS stop_suggestions(
+                  id TEXT PRIMARY KEY, vehicle_id TEXT NOT NULL, trip_id TEXT, arrived_at TEXT NOT NULL,
+                  departed_at TEXT, latitude REAL NOT NULL, longitude REAL NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                  UNIQUE(vehicle_id, arrived_at, latitude, longitude)
+                );
+                CREATE TABLE IF NOT EXISTS gpx_imports(
+                  file_hash TEXT PRIMARY KEY, vehicle_id TEXT NOT NULL, imported_at TEXT NOT NULL,
+                  point_count INTEGER NOT NULL, trip_id TEXT
+                );
+                CREATE TABLE IF NOT EXISTS geocode_cache(
+                  cache_key TEXT PRIMARY KEY, latitude REAL NOT NULL, longitude REAL NOT NULL,
+                  label TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS import_log(
                   source_hash TEXT PRIMARY KEY, imported_at TEXT NOT NULL, dry_run INTEGER NOT NULL,
@@ -190,6 +227,140 @@ class JournalStore:
             raise ValueError("coordinates_invalid")
         with self._lock, self.connection:
             self.connection.execute("INSERT OR IGNORE INTO gps_points(vehicle_id,recorded_at,latitude,longitude,accuracy_m) VALUES(?,?,?,?,?)", (vehicle_id, recorded_at or _now(), latitude, longitude, accuracy_m))
+
+    def upsert_overnight(self, place_id: str, **fields: Any) -> None:
+        now = _now()
+        with self._lock, self.connection:
+            self.connection.execute("INSERT INTO overnight_details(place_id,place_kind,website_url,booking_note,large_rv_suitable,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(place_id) DO UPDATE SET place_kind=excluded.place_kind,website_url=excluded.website_url,booking_note=excluded.booking_note,large_rv_suitable=excluded.large_rv_suitable,updated_at=excluded.updated_at", (place_id, fields.get("place_kind", "other"), fields.get("website_url"), fields.get("booking_note"), fields.get("large_rv_suitable"), now, now))
+
+    def upsert_rating(self, place_id: str, overall: int, **fields: Any) -> None:
+        if not 1 <= int(overall) <= 5:
+            raise ValueError("rating_overall_invalid")
+        for key in ("large_rv_access", "space_maneuvering", "facilities", "surroundings"):
+            if fields.get(key) is not None and not 1 <= int(fields[key]) <= 5:
+                raise ValueError("rating_criterion_invalid")
+        now = _now()
+        with self._lock, self.connection:
+            self.connection.execute("INSERT INTO place_ratings(place_id,overall,large_rv_access,space_maneuvering,facilities,surroundings,review_text,rated_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(place_id) DO UPDATE SET overall=excluded.overall,large_rv_access=excluded.large_rv_access,space_maneuvering=excluded.space_maneuvering,facilities=excluded.facilities,surroundings=excluded.surroundings,review_text=excluded.review_text,rated_at=excluded.rated_at,updated_at=excluded.updated_at", (place_id, overall, fields.get("large_rv_access"), fields.get("space_maneuvering"), fields.get("facilities"), fields.get("surroundings"), fields.get("review_text", ""), fields.get("rated_at", now), now, now))
+
+    def delete_rating(self, place_id: str) -> None:
+        with self._lock, self.connection:
+            self.connection.execute("DELETE FROM place_ratings WHERE place_id=?", (place_id,))
+
+    def list_suggestions(self, vehicle_id: str, status: str = "pending") -> list[dict[str, Any]]:
+        if status not in {"pending", "accepted", "dismissed"}:
+            raise ValueError("suggestion_status_invalid")
+        with self._lock:
+            return [dict(row) for row in self.connection.execute("SELECT * FROM stop_suggestions WHERE vehicle_id=? AND status=? ORDER BY arrived_at", (vehicle_id, status)).fetchall()]
+
+    def generate_suggestions(self, vehicle_id: str, *, minimum_minutes: int = 10, radius_m: float = 150.0, trip_id: str | None = None) -> list[dict[str, Any]]:
+        if minimum_minutes < 1 or radius_m <= 0:
+            raise ValueError("suggestion_parameters_invalid")
+        with self._lock:
+            points = [dict(row) for row in self.connection.execute("SELECT * FROM gps_points WHERE vehicle_id=? ORDER BY recorded_at", (vehicle_id,)).fetchall()]
+        created: list[dict[str, Any]] = []
+        for start, end in itertools.pairwise(points):
+            started = datetime.fromisoformat(start["recorded_at"])
+            ended = datetime.fromisoformat(end["recorded_at"])
+            seconds = (ended - started).total_seconds()
+            distance = _distance_m(start["latitude"], start["longitude"], end["latitude"], end["longitude"])
+            if seconds < minimum_minutes * 60 or distance > radius_m:
+                continue
+            suggestion_id = _id("suggestion")
+            with self._lock, self.connection:
+                self.connection.execute("INSERT OR IGNORE INTO stop_suggestions(id,vehicle_id,trip_id,arrived_at,departed_at,latitude,longitude,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (suggestion_id, vehicle_id, trip_id, start["recorded_at"], end["recorded_at"], start["latitude"], start["longitude"], "pending", _now(), _now()))
+                row = self.connection.execute("SELECT * FROM stop_suggestions WHERE vehicle_id=? AND arrived_at=? AND latitude=? AND longitude=?", (vehicle_id, start["recorded_at"], start["latitude"], start["longitude"])).fetchone()
+            if row is not None:
+                created.append(dict(row))
+        return created
+
+    def accept_suggestion(self, suggestion_id: str, *, name: str = "GPS-Stopp", category: str = "other", trip_id: str | None = None) -> str:
+        with self._lock:
+            row = self.connection.execute("SELECT * FROM stop_suggestions WHERE id=? AND status='pending'", (suggestion_id,)).fetchone()
+        if row is None:
+            raise ValueError("suggestion_not_pending")
+        stop_id = self.create_stop(row["vehicle_id"], trip_id=trip_id or row["trip_id"], name=name, category=category, occurred_at=row["arrived_at"], latitude=row["latitude"], longitude=row["longitude"])
+        with self._lock, self.connection:
+            self.connection.execute("UPDATE stop_suggestions SET status='accepted',updated_at=? WHERE id=?", (_now(), suggestion_id))
+        return stop_id
+
+    def dismiss_suggestion(self, suggestion_id: str) -> None:
+        with self._lock, self.connection:
+            cursor = self.connection.execute("UPDATE stop_suggestions SET status='dismissed',updated_at=? WHERE id=? AND status='pending'", (_now(), suggestion_id))
+            if cursor.rowcount != 1:
+                raise ValueError("suggestion_not_pending")
+
+    @staticmethod
+    def analyze_gpx(data: bytes, vehicle_id: str) -> dict[str, Any]:
+        if len(data) > 10 * 1024 * 1024:
+            raise ValueError("gpx_file_too_large")
+        try:
+            root = ElementTree.fromstring(data)
+        except ElementTree.ParseError as err:
+            raise ValueError("gpx_xml_invalid") from err
+        if root.tag.rsplit("}", 1)[-1] != "gpx":
+            raise ValueError("gpx_root_invalid")
+        points: list[dict[str, Any]] = []
+        for node in root.iter():
+            if node.tag.rsplit("}", 1)[-1] != "trkpt":
+                continue
+            try:
+                lat, lon = float(node.attrib["lat"]), float(node.attrib["lon"])
+                time_node = next(child for child in node if child.tag.rsplit("}", 1)[-1] == "time")
+                raw_time = time_node.text or ""
+                raw_time = f"{raw_time[:-1]}+00:00" if raw_time.endswith("Z") else raw_time
+                recorded_at = datetime.fromisoformat(raw_time).astimezone(UTC).isoformat()
+            except (KeyError, StopIteration, TypeError, ValueError) as err:
+                raise ValueError("gpx_point_invalid") from err
+            if not -90 <= lat <= 90 or not -180 <= lon <= 180:
+                raise ValueError("gpx_coordinate_invalid")
+            points.append({"vehicle_id": vehicle_id, "recorded_at": recorded_at, "latitude": lat, "longitude": lon})
+        if not points:
+            raise ValueError("gpx_no_valid_points")
+        return {"file_hash": hashlib.sha256(data).hexdigest(), "vehicle_id": vehicle_id, "points": points, "point_count": len(points), "warnings": []}
+
+    def import_gpx(self, preview: dict[str, Any], trip_id: str | None = None) -> dict[str, Any]:
+        digest = preview["file_hash"]
+        with self._lock:
+            if self.connection.execute("SELECT 1 FROM gpx_imports WHERE file_hash=?", (digest,)).fetchone():
+                return {"imported": False, "reason": "already_imported", "file_hash": digest}
+        with self._lock, self.connection:
+            for point in preview["points"]:
+                self.connection.execute("INSERT OR IGNORE INTO gps_points(vehicle_id,recorded_at,latitude,longitude) VALUES(?,?,?,?)", (point["vehicle_id"], point["recorded_at"], point["latitude"], point["longitude"]))
+            self.connection.execute("INSERT INTO gpx_imports(file_hash,vehicle_id,imported_at,point_count,trip_id) VALUES(?,?,?,?,?)", (digest, preview["vehicle_id"], _now(), preview["point_count"], trip_id))
+        return {"imported": True, "file_hash": digest, "point_count": preview["point_count"]}
+
+    def render_pdf(self, vehicle_id: str, trip_id: str, language: str = "de") -> bytes:
+        """Create a minimal valid, dependency-free PDF report for offline use."""
+        trip = next((item for item in self.list_trips(vehicle_id) if item["id"] == trip_id), None)
+        if trip is None:
+            raise ValueError("trip_not_found")
+        title = str(trip["title"]).replace("(", "\\(").replace(")", "\\)")
+        label = "Reisebericht" if language == "de" else "Travel report"
+        stream = f"BT /F1 18 Tf 72 740 Td ({label}) Tj 0 -30 Td /F1 12 Tf ({title}) Tj 0 -24 Td (Vehicle: {vehicle_id}) Tj ET".encode()
+        objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>", b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream"]
+        result = bytearray(b"%PDF-1.4\n")
+        offsets = [0]
+        for index, obj in enumerate(objects, 1):
+            offsets.append(len(result)); result.extend(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
+        xref = len(result); result.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+        result.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
+        result.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+        return bytes(result)
+
+    def reverse_geocode(self, latitude: float, longitude: float, resolver: Any) -> str:
+        """Resolve a coordinate through an injected provider and cache the label."""
+        key = f"{float(latitude):.4f}:{float(longitude):.4f}"
+        with self._lock:
+            row = self.connection.execute("SELECT label FROM geocode_cache WHERE cache_key=?", (key,)).fetchone()
+        if row is not None:
+            return str(row[0])
+        label = str(resolver(float(latitude), float(longitude))).strip()
+        if not label:
+            raise ValueError("geocode_empty")
+        with self._lock, self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO geocode_cache(cache_key,latitude,longitude,label,updated_at) VALUES(?,?,?,?,?)", (key, latitude, longitude, label, _now()))
+        return label
 
     def preview_legacy_import(self, source_path: str | Path) -> dict[str, Any]:
         source = Path(source_path)

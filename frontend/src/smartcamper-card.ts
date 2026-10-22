@@ -15,7 +15,7 @@ import {
 import * as L from "leaflet";
 
 type HassState = { state?: string; attributes?: Record<string, unknown> };
-type HassLike = { states?: Record<string, HassState>; callService?: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown> };
+type HassLike = { states?: Record<string, HassState>; callService?: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown>; callWS?: (message: Record<string, unknown>) => Promise<any> };
 
 class SmartCamperCard extends HTMLElement {
   private config: CardConfig = { type: "custom:smartcamper-card", module: "travel_journal" };
@@ -99,7 +99,7 @@ class SmartCamperCard extends HTMLElement {
       const vehicleId = selectVehicle(this.config, states);
       const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId && state.attributes?.database === "smartcamper_suite_travel_journal.sqlite");
       const journal = sensor?.attributes as JournalView | undefined;
-      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions{margin-top:12px}.journal-create{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}</style>${renderJournalHtml(journal, this.config)}`;
+      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.journal-create,.journal-pdf,.journal-gpx-label{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}.journal-gpx{display:none}</style>${renderJournalHtml(journal, this.config)}`;
       this.querySelector(".journal-create")?.addEventListener("click", () => {
         if (vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: vehicleId, title: "Neue Reise" });
       });
@@ -112,6 +112,20 @@ class SmartCamperCard extends HTMLElement {
       });
       this.querySelector(".journal-delete")?.addEventListener("click", () => {
         if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_delete_trip", { entry_id: "default", trip_id: tripId });
+      });
+      this.querySelector(".journal-pdf")?.addEventListener("click", async () => {
+        if (!tripId || !vehicleId || !this._hass?.callWS) return;
+        const result = await this._hass.callWS({ type: "smartcamper_suite/journal/export_pdf", vehicle_id: vehicleId, trip_id: tripId, language: "de" });
+        if (!result?.pdf_base64) return;
+        const bytes = Uint8Array.from(atob(result.pdf_base64), (value) => value.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        const anchor = document.createElement("a"); anchor.href = url; anchor.download = result.filename ?? "smartcamper-travel-journal.pdf"; anchor.click(); URL.revokeObjectURL(url);
+      });
+      this.querySelector<HTMLInputElement>(".journal-gpx")?.addEventListener("change", async (event) => {
+        const file = (event.target as HTMLInputElement).files?.[0];
+        if (!file || !vehicleId || !this._hass?.callWS) return;
+        const encoded = btoa(String.fromCharCode(...new Uint8Array(await file.arrayBuffer())));
+        await this._hass.callWS({ type: "smartcamper_suite/journal/import_gpx", vehicle_id: vehicleId, content_base64: encoded });
       });
       return;
     }

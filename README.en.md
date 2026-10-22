@@ -39,6 +39,8 @@ available through explicit opt-in preview/import operations with SHA-256
 idempotency; the old database is opened read-only and never changed
 automatically. The Stable feature matrix and intentionally open adapters are
 documented in [docs/phase-2d-travel-journal-plan.md](docs/phase-2d-travel-journal-plan.md).
+The first isolated Home Assistant practical-test preparation is documented in
+[docs/phase-2d-home-assistant-practical-test.md](docs/phase-2d-home-assistant-practical-test.md).
 
 The QA report and current merge gates are documented in
 [docs/phase-2a-qa.md](docs/phase-2a-qa.md).

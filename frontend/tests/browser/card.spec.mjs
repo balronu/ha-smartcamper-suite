@@ -105,6 +105,14 @@ try {
   assert.match(await page.locator("#first").innerText(), /2 Reisen/);
   await page.locator("#first .journal-create").click();
   assert.deepEqual(calls.at(-1), ["smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: "womo", title: "Neue Reise" }]);
+  await page.evaluate(() => {
+    document.querySelector("#first").hass.callWS = async () => ({ pdf_base64: "JVBERi0xLjQKJSVFT0YK", filename: "journal.pdf" });
+  });
+  const journalPdf = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#first .journal-pdf").click(),
+  ]);
+  assert.equal(journalPdf[0].suggestedFilename(), "journal.pdf");
   console.log("browser card assertions: PASS");
 } finally {
   await browser.close();

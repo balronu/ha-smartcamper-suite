@@ -45,6 +45,9 @@ verändert. Die vollständige Stable-Matrix und die bewusst noch offenen
 Adapter sind in [docs/phase-2d-travel-journal-plan.md](docs/phase-2d-travel-journal-plan.md)
 beschrieben.
 
+Die Vorbereitung des ersten isolierten HA-Praxistests steht in
+[docs/phase-2d-home-assistant-practical-test.md](docs/phase-2d-home-assistant-practical-test.md).
+
 ## Module
 
 | Modul | Darstellung | Status |

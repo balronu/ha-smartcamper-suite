@@ -21,8 +21,12 @@ weder automatisch gesucht noch geöffnet.
 | GPS-Punkte | übernommen | getrennte Tabelle, deduplizierte Koordinaten; keine Hintergrundaufzeichnung ohne Modulfreigabe |
 | Reiseübersicht/Summen | übernommen | Journal-Sensor je Fahrzeug |
 | Diagnose | übernommen | Sensorattribute ohne Secrets |
-| GPX/PDF/Reverse-Geocoding | vorbereitet | Stable-Verträge sind inventarisiert; Adapter werden in einer folgenden Teiliteration ergänzt |
-| Editor/Kartenansicht | begonnen | gemeinsame `custom:smartcamper-card`, Journal-Ansicht und Editor-Modulwahl |
+| GPX-Analyse und Import | übernommen | offline parser, Hash-Idempotenz, Punktvalidierung und Trip-Zuordnung |
+| PDF-Bericht | übernommen | dependency-freier gültiger Offline-PDF-Export über WebSocket |
+| Reverse-Geocoding | übernommen | Suite-eigener Cache mit injizierbarem Provider-Resolver; keine Live-Anfrage in Tests |
+| Aufenthaltsvorschläge | übernommen | zeit-/entfernungsbasierte synthetische Vorschläge mit Accept/Dismiss |
+| Übernachtungsdaten und Bewertungen | übernommen | normalisierte Tabellen, Validierung und CRUD-Grundlage |
+| Editor/Kartenansicht | übernommen | gemeinsame `custom:smartcamper-card`, Journal-Ansicht und Editor-Modulwahl |
 | Übersetzungen | Suite-Struktur vorhanden | Journal-spezifische Texte werden mit der Kartenansicht weiter vervollständigt |
 | Legacy-Import | sicherer Opt-in-Pfad | Dry-run, Schema-/Hashprüfung, Idempotenz, ID-Mapping, unveränderte Quelle |
 
@@ -39,9 +43,11 @@ weder automatisch gesucht noch geöffnet.
 - Unklare Fahrzeugzuordnungen werden nicht automatisch zusammengeführt;
   `vehicle_map` muss explizit übergeben werden.
 
-## Noch nicht als vollständig übernommen behauptet
+## Bewusste Abweichungen
 
-PDF-Berichte, vollständige GPX-Analyse/-Import, Reverse-Geocoding,
-Aufenthaltsvorschläge, Bewertungen und sämtliche historischen Editorflächen
-benötigen noch eigene Suite-Adapter. Diese Funktionen werden in dieser Phase
-nicht stillschweigend als fertig dokumentiert.
+Der PDF-Export ist ein dependency-freier, synthetischer Suite-Bericht und
+übernimmt noch nicht jedes historische ReportLab-Layout der Einzelintegration.
+Reverse-Geocoding verwendet einen injizierten gemeinsamen Provider-Resolver;
+die Suite führt keine ungeprüften Live-Endpunkte ein. Historische Spezial-
+Editorflächen der Einzelintegration werden in der gemeinsamen Karte über
+WebSocket- und Service-Verträge abgebildet, nicht als separate Karten kopiert.

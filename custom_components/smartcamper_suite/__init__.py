@@ -14,7 +14,7 @@ except ImportError:  # Allows domain-layer tests without Home Assistant installe
 
 from .api import ApiClient
 from .auth import CredentialStore
-from .const import CONF_NAKORDONI_AUTH_METHOD, DOMAIN
+from .const import CONF_NAKORDONI_AUTH_METHOD, DOMAIN, ModuleName
 from .frontend import async_register_frontend, async_unregister_frontend
 from .fuel_stations import FuelProviderRegistry, FuelStationsRuntime, ProviderResponse
 from .models import Vehicle
@@ -123,6 +123,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(DOMAIN, SERVICE_REMOVE_CREDENTIAL, _async_remove_credential, _REMOVE_CREDENTIAL_SCHEMA)
         hass.services.async_register(DOMAIN, SERVICE_REFRESH_FUEL, _async_refresh_fuel, _REFRESH_FUEL_SCHEMA)
     await runtime.modules.async_setup(runtime)
+    await runtime.fuel.async_start_background(
+        hass,
+        runtime.modules.modules[ModuleName.FUEL_STATIONS].started,
+    )
     return True
 
 

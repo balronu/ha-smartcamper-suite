@@ -51,6 +51,11 @@ try {
   assert.equal(await page.locator("#first .brand-logo").count(), 2);
   assert.match((await page.locator("#first .brand-logo").allTextContents()).join(" ") + (await page.locator("#first .brand-logo").nth(1).getAttribute("src")), /shell\.png|aral\.png/);
   assert.match(await page.locator("#first .navigate").first().getAttribute("href"), /google\.com\/maps\/dir/);
+  for (const mode of ["compact", "detailed", "individual"]) {
+    await page.evaluate((mode) => document.querySelector("#first").setConfig({ type: "custom:smartcamper-card", module: "fuel_stations", vehicle_id: "womo", display_mode: mode }), mode);
+    assert.equal(await page.locator(`#first .fuel-station.${mode}`).count(), 2);
+  }
+  await page.evaluate(() => document.querySelector("#first").setConfig({ type: "custom:smartcamper-card", module: "fuel_stations", vehicle_id: "womo", custom_layout: "highlights_list", sort_mode: "price", navigation_provider: "google", fetch_mode: "manual" }));
   await page.locator("#first .refresh").click();
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], ["smartcamper_suite", "refresh_fuel_stations", { vehicle_id: "womo" }]);
@@ -70,9 +75,11 @@ try {
     editor.addEventListener("config-changed", (event) => { detail = event.detail; });
     editor.querySelector("[data-field=sort_mode]").value = "price";
     editor.querySelector("[data-field=sort_mode]").dispatchEvent(new Event("change", { bubbles: true }));
-    return detail.config.sort_mode;
+    editor.querySelector("[data-field=fetch_mode]").value = "manual";
+    editor.querySelector("[data-field=fetch_mode]").dispatchEvent(new Event("change", { bubbles: true }));
+    return { sort: detail.config.sort_mode, fetch: detail.config.fetch_mode };
   });
-  assert.equal(editorResult, "price");
+  assert.deepEqual(editorResult, { sort: "price", fetch: "manual" });
   console.log("browser card assertions: PASS");
 } finally {
   await browser.close();

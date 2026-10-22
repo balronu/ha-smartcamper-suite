@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from math import isfinite
+from math import cos, isfinite, radians, sqrt
 from typing import Protocol
 
 from .models import Vehicle
@@ -380,6 +380,86 @@ class FuelStationsRuntime:
         self.provider_usage: dict[str, ProviderUsage] = {}
         self._usage_checked: dict[str, datetime] = {}
         self._usage_locks: dict[str, asyncio.Lock] = {}
+        self._remove_listeners: list[Callable[[], None]] = []
+        self._background_tasks: set[asyncio.Task[object]] = set()
+        self._hass: object | None = None
+
+    async def async_start_background(self, hass: object, enabled: bool) -> None:
+        """Start only configured refresh modes for an enabled fuel module."""
+        if not enabled or self._remove_listeners:
+            return
+        from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
+
+        self._hass = hass
+        for vehicle in self.vehicles.values():
+            if vehicle.archived or vehicle.tracker_entity_id is None:
+                continue
+            mode = vehicle.fuel_refresh_mode
+            if mode in {"movement", "adaptive", "automatic"}:
+                self._remove_listeners.append(
+                    async_track_state_change_event(hass, [vehicle.tracker_entity_id], self._async_tracker_changed)
+                )
+            if mode in {"automatic", "adaptive"}:
+                self._remove_listeners.append(
+                    async_track_time_interval(
+                        hass,
+                        self._async_periodic_refresh,
+                        timedelta(minutes=vehicle.fuel_refresh_interval_min),
+                    )
+                )
+
+    async def _async_periodic_refresh(self, _now: datetime) -> None:
+        for vehicle in self.vehicles.values():
+            if vehicle.fuel_refresh_mode in {"automatic", "adaptive"}:
+                await self._async_refresh_from_tracker(vehicle)
+
+    async def _async_tracker_changed(self, event: object) -> None:
+        data = getattr(event, "data", {})
+        new_state = data.get("new_state") if isinstance(data, dict) else None
+        old_state = data.get("old_state") if isinstance(data, dict) else None
+        entity_id = getattr(new_state, "entity_id", None) or getattr(old_state, "entity_id", None)
+        vehicle = next((item for item in self.vehicles.values() if item.tracker_entity_id == entity_id), None)
+        if vehicle is None or vehicle.fuel_refresh_mode not in {"movement", "adaptive", "automatic"}:
+            return
+        if self._location_changed(old_state, new_state, vehicle):
+            await self._async_refresh_from_tracker(vehicle)
+
+    async def _async_refresh_from_tracker(self, vehicle: Vehicle) -> None:
+        if self._hass is None or vehicle.tracker_entity_id is None:
+            return
+        states = getattr(self._hass, "states", None)
+        state = states.get(vehicle.tracker_entity_id) if states is not None else None
+        if state is None or getattr(state, "state", None) in {"unknown", "unavailable"}:
+            self.status[vehicle.vehicle_id] = {"state": "location_unavailable", "error": None}
+            return
+        attributes = getattr(state, "attributes", {})
+        try:
+            latitude = float(attributes["latitude"])
+            longitude = float(attributes["longitude"])
+        except (KeyError, TypeError, ValueError):
+            self.status[vehicle.vehicle_id] = {"state": "location_unavailable", "error": None}
+            return
+        task = asyncio.create_task(self.async_search(vehicle.vehicle_id, latitude, longitude))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    @staticmethod
+    def _location_changed(old_state: object, new_state: object, vehicle: Vehicle) -> bool:
+        if old_state is None or new_state is None:
+            return True
+        old = getattr(old_state, "attributes", {})
+        new = getattr(new_state, "attributes", {})
+        try:
+            old_lat, old_lon = float(old["latitude"]), float(old["longitude"])
+            new_lat, new_lon = float(new["latitude"]), float(new["longitude"])
+        except (KeyError, TypeError, ValueError):
+            return True
+        lat_delta = radians(new_lat - old_lat)
+        lon_delta = radians(new_lon - old_lon)
+        mean_lat = radians((new_lat + old_lat) / 2)
+        distance_km = 6371 * sqrt(lat_delta * lat_delta + (cos(mean_lat) * lon_delta) ** 2)
+        threshold = float(vehicle.fuel_display_options.get("movement_threshold_km", 0.5))
+        return distance_km >= max(threshold, 0.0)
 
     async def async_search(self, vehicle_id: str, latitude: float, longitude: float) -> list[FuelStation]:
         vehicle = self.vehicles.get(vehicle_id)
@@ -471,6 +551,14 @@ class FuelStationsRuntime:
             return result
 
     async def async_unload(self) -> None:
+        for remove in self._remove_listeners:
+            remove()
+        self._remove_listeners.clear()
+        for task in self._background_tasks:
+            task.cancel()
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+        self._background_tasks.clear()
         for task in self._inflight.values():
             task.cancel()
         if self._inflight:

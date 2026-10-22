@@ -26,6 +26,8 @@ class Vehicle:
     fuel_station_count: int = 5
     fuel_provider_modes: list[str] = field(default_factory=lambda: ["auto"])
     fuel_display_options: dict[str, Any] = field(default_factory=dict)
+    fuel_refresh_mode: str = "automatic"
+    fuel_refresh_interval_min: int = 15
     archived: bool = False
 
     @classmethod
@@ -49,6 +51,10 @@ class Vehicle:
             raise ValidationError("fuel_radius_km must be between 0 and 25")
         if not 1 <= self.fuel_station_count <= 10:
             raise ValidationError("fuel_station_count must be between 1 and 10")
+        if self.fuel_refresh_mode not in {"automatic", "movement", "adaptive", "manual"}:
+            raise ValidationError("fuel_refresh_mode is invalid")
+        if not 1 <= self.fuel_refresh_interval_min <= 1440:
+            raise ValidationError("fuel_refresh_interval_min must be between 1 and 1440")
         supported_fuels = {"diesel", "e5", "e10", "lpg", "hvo100"}
         if any(fuel not in supported_fuels for fuel in self.fuel_types):
             raise ValidationError("fuel_types contains an unsupported fuel")

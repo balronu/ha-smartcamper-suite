@@ -25,14 +25,14 @@ einen HA-Fixture-Test oder einen Frontend-Test abgedeckt.
 | Navigation | Nachgewiesen | Apple Maps, Google Maps, Waze oder automatischer Google-Fallback |
 | Anbieterlogos | Nachgewiesen | 60 verifizierte v0.8.4-PNG-Assets werden unter `/smartcamper_suite/logos/` statisch und idempotent ausgeliefert; unbekannte Marken haben einen Fallback |
 | Diagnostik/Quota-Anzeige | Teilweise | Secret-freie Usage-Projektion für Nakordoni; Providerfehler und unbekannte Quoten sichtbar |
-| Aktualisierung | Teilweise | Manuelle Karten-/Service-Aktualisierung und Sensorpfad; die historische automatische/bewegungsabhängige Koordination ist noch nicht vollständig portiert |
+| Aktualisierung | Nachgewiesen synthetisch | Automatisch, bewegungsabhängig, adaptiv und manuell; GPS-Wechsel, fehlendes Signal, Cache/Deduplizierung und deaktivierte Module sind abgedeckt; echte HA-Laufzeit bleibt CI-Evidenz |
 | Persistenter Cache | Teilweise | Account-/Fahrzeug-Key und Deduplizierung; TTL folgt |
 | Rate-Limits/Credits | Teilweise nachgewiesen | 429/Provider-Ausfall, gemeinsamer Cache und Nakordoni-Usage/Quota; nicht dokumentierte Fremdquoten bleiben unbekannt |
 | Nakordoni OAuth2-PKCE | Nachgewiesen synthetisch | Exakte Stable-Implementierung/URLs, HA-Refresh-Lock und lokaler PKCE-/Revoke-Testserver; kein echter Providerzugang |
 | Marktberechtigungen | Teilweise | `markets_approved`/`markets_granted`/`markets_available`/`markets_allowed` werden ohne Annahmen ausgewertet; providerseitige Länder-/Quota-Policies bleiben dort unbekannt, wo die API sie nicht liefert |
 | Legacy-Config-Import | Nachgewiesen | Opt-in, idempotent, secret-frei, transaktionaler Commit und Rollback |
 | Legacy-Lovelace-Import | Preview-only | Karten werden nicht automatisch verändert |
-| Drei Lovelace-Modi | Teilweise | display_mode, Layoutfamilien, Logos, Highlights, Navigation und Editor vorhanden; vollständige historische CSS-/Refresh-/Diagnostikparität bleibt offen |
+| Drei Lovelace-Modi | Nachgewiesen synthetisch | compact, detailed und individual sowie Layoutfamilien, Logos, Highlights, Navigation, Refresh- und Editoroptionen; vollständige historische CSS-/Diagnostikparität bleibt bewusst enger als die Originalkarte |
 | Mehrere Karten/Fahrzeuge | Nachgewiesen | Explizite Fahrzeug-ID und getrennte Sensorattribute |
 
 ## Bewusste Grenzen

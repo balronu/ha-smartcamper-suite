@@ -2,6 +2,11 @@
 
 **Phase 2B development — not a production release.**
 
+<p align="center"><img src="docs/assets/smartcamper-suite-logo-set.png" alt="SmartCamper Suite Logo-Set" width="720"></p>
+
+SmartCamper Suite – Eine modulare Home-Assistant-Integration für
+Wohnmobilreisen, Tankstellen, Routenplanung und Grenzwartezeiten.
+
 SmartCamper Suite is a single modular Home Assistant custom integration under
 the domain `smartcamper_suite`. It provides one shared vehicle registry,
 provider/account boundary, credential abstraction, offline API infrastructure,
@@ -14,9 +19,9 @@ The `fuel_stations` module now provides offline-testable Tankerkönig, Petromap
 and Nakordoni adapters, vehicle-scoped search settings, shared provider
 credentials, provider fallback, per-vehicle sensors and the fuel-stations view
 in `custom:smartcamper-card`. The card includes multi-fuel prices, sorting,
-highlights, navigation, provider logos, diagnostics and manual refresh. OAuth
-refresh and legacy migration are tested as isolated candidate paths; no legacy
-entry is changed automatically.
+highlights, navigation, provider logos, diagnostics, automatic/movement-based
+refresh and manual refresh. OAuth refresh and legacy migration are tested as
+isolated candidate paths; no legacy entry is changed automatically.
 
 This is still development code. It does not open or migrate a productive
 database, use real credentials, perform live API calls in tests, or install
@@ -26,6 +31,18 @@ Modules: `travel_journal`, `fuel_stations`, `route_planner`, and
 `border_forecast`. Only `fuel_stations` has Phase-2B candidate functionality;
 the other three remain isolated placeholders and all modules stay disabled by
 default.
+
+## Module
+
+| Modul | Darstellung | Status |
+|---|---|---|
+| Camper Travel Journal | [Reisetagebuch](docs/assets/module-travel-journal.svg) | Platzhalter, Phase 2B nicht implementiert |
+| Mobile Fuel Stations | [Tankstellen](docs/assets/module-fuel-stations.svg) | Phase-2B-Kandidat, offline getestet |
+| Camper Route Planner | [Routenplanung](docs/assets/module-route-planner.svg) | Platzhalter, Phase 2B nicht implementiert |
+| Wartezeiten Forecast | [Grenzwartezeiten](docs/assets/module-border-forecast.svg) | Platzhalter, Phase 2B nicht implementiert |
+
+Die Branding-Pfade und die Herkunft der freigegebenen Logo-Datei sind in
+[docs/branding.md](docs/branding.md) dokumentiert.
 
 ## Development
 

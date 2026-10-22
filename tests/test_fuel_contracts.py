@@ -140,3 +140,23 @@ def test_shared_account_deduplicates_concurrent_requests_and_respects_market_pol
         await runtime.async_unload()
 
     asyncio.run(run())
+
+
+def test_refresh_modes_ignore_small_tracker_jitter_and_allow_manual_mode():
+    vehicle = Vehicle.create(
+        "Womo",
+        tracker_entity_id="device_tracker.womo",
+        fuel_refresh_mode="movement",
+        fuel_display_options={"movement_threshold_km": 0.5},
+    )
+    old = type("State", (), {"entity_id": vehicle.tracker_entity_id, "attributes": {"latitude": 50.0, "longitude": 8.0}})()
+    small = type("State", (), {"entity_id": vehicle.tracker_entity_id, "attributes": {"latitude": 50.0001, "longitude": 8.0001}})()
+    large = type("State", (), {"entity_id": vehicle.tracker_entity_id, "attributes": {"latitude": 50.01, "longitude": 8.01}})()
+    assert not FuelStationsRuntime._location_changed(old, small, vehicle)
+    assert FuelStationsRuntime._location_changed(old, large, vehicle)
+    assert FuelStationsRuntime._location_changed(old, None, vehicle)
+
+    runtime = FuelStationsRuntime({}, {}, FuelProviderRegistry(ProviderRegistry(), lambda *_args: None), {}.get)
+    asyncio.run(runtime.async_start_background(object(), enabled=False))
+    assert runtime._remove_listeners == []
+    asyncio.run(runtime.async_unload())

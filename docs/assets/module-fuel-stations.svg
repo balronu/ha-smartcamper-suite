@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-labelledby="title desc">
+  <title id="title">Mobile Fuel Stations</title><desc id="desc">Illustration of a fuel station with pumps.</desc>
+  <rect width="640" height="260" rx="28" fill="#0b2940"/><path d="M0 212h640" stroke="#1c9ca8" stroke-width="22"/>
+  <path d="M120 52h168v164H120z" fill="#f4f8fa"/><path d="M120 52h168v35H120z" fill="#168fc1"/><text x="204" y="78" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="#fff">FUEL</text>
+  <rect x="148" y="108" width="54" height="92" rx="8" fill="#0b2940"/><rect x="212" y="108" width="54" height="92" rx="8" fill="#0b2940"/><path d="M288 92h38v96c0 18 18 28 32 16l-15-16V82" fill="none" stroke="#ffb34d" stroke-width="11"/><circle cx="164" cy="128" r="8" fill="#1c9ca8"/><circle cx="228" cy="128" r="8" fill="#ef6c3b"/><path d="M390 200c35-100 110-104 154-18" fill="none" stroke="#ffb34d" stroke-width="10"/><circle cx="468" cy="102" r="34" fill="#ef6c3b"/><path d="M468 83v38M449 102h38" stroke="#fff" stroke-width="8"/>
+</svg>

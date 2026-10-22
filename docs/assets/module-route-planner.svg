@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-labelledby="title desc">
+  <title id="title">Camper Route Planner</title><desc id="desc">Illustration of navigation through a landscape.</desc>
+  <rect width="640" height="260" rx="28" fill="#0b2940"/><path d="M0 190 150 108l112 50 100-76 278 90v88H0z" fill="#147b9e"/><path d="M0 218 165 153l98 34 103-67 274 79v61H0z" fill="#2ca8ac"/>
+  <path d="M72 220c130-54 157-12 226-60 60-42 76-97 185-109 43-5 76 8 105 30" fill="none" stroke="#ffb34d" stroke-width="17" stroke-linecap="round"/><path d="M72 220c130-54 157-12 226-60 60-42 76-97 185-109" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="13 13"/>
+  <path d="M444 64 480 44l35 20-35 20zM480 44v45" fill="#ef6c3b"/><rect x="455" y="95" width="60" height="44" rx="7" fill="#f4f8fa"/><circle cx="469" cy="143" r="13" fill="#0b2940"/><circle cx="501" cy="143" r="13" fill="#0b2940"/>
+</svg>

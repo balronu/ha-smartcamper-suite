@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-labelledby="title desc">
+  <title id="title">Camper Travel Journal</title><desc id="desc">Illustration of a motorhome travel logbook.</desc>
+  <rect width="640" height="260" rx="28" fill="#0b2940"/><circle cx="510" cy="74" r="42" fill="#ffb34d"/>
+  <path d="M0 178 150 112l95 46 110-72 285 92v82H0z" fill="#167da5"/><path d="M0 205 130 150l110 34 110-58 290 82v52H0z" fill="#1c9ca8"/>
+  <path d="M110 84h150v112H110z" fill="#fff"/><path d="M125 102h120M125 126h100M125 150h115M125 174h75" stroke="#0b2940" stroke-width="9"/>
+  <path d="M83 206h210" stroke="#ffb34d" stroke-width="12" stroke-linecap="round"/><circle cx="110" cy="206" r="18" fill="#ef6c3b"/>
+</svg>

@@ -1,3 +1,17 @@
 {
-  "config": {"abort": {"single_instance_allowed": "Only one SmartCamper Suite entry is supported."}, "step": {"user": {"title": "SmartCamper Suite", "description": "Create the shared suite entry."}}}
+  "config": {
+    "abort": {
+      "single_instance_allowed": "Es wird nur ein SmartCamper-Suite-Eintrag unterstützt.",
+      "oauth_implementation_unavailable": "Die Nakordoni-OAuth-Konfiguration ist nicht verfügbar.",
+      "oauth_timeout": "Die Nakordoni-Anmeldung hat zu lange gedauert.",
+      "oauth_failed": "Die Nakordoni-Anmeldung ist fehlgeschlagen.",
+      "oauth_error": "Nakordoni hat keine gültige Anmeldung zurückgegeben."
+    },
+    "step": {
+      "vehicle": {"title": "Fahrzeug und GPS", "description": "Legen Sie ein Fahrzeug an und wählen Sie den GPS-Tracker.", "data": {"name": "Fahrzeugname", "tracker_entity_id": "GPS-Tracker", "length_m": "Länge (m)", "width_m": "Breite (m)", "height_m": "Höhe (m)", "weight_t": "Gewicht (t)", "axle_count": "Achsen", "fuel_types": "Kraftstoffarten (kommagetrennt)"}},
+      "providers": {"title": "Provider", "description": "API-Schlüssel werden nur im Config Entry gespeichert. Leer lassen, wenn ein Provider nicht genutzt wird.", "data": {"tankerkoenig_api_key": "Tankerkönig API-Schlüssel", "petromap_api_key": "Petromap API-Schlüssel", "nakordoni_api_key": "Nakordoni API-Schlüssel", "nakordoni_oauth": "Nakordoni über OAuth anmelden"}},
+      "modules": {"title": "Module", "description": "Aktivieren Sie nur die drei verfügbaren Suite-Module.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
+      "common": {"title": "Gemeinsame Einstellungen", "description": "Legen Sie Aktualisierung und sichere Importgrenzen fest.", "data": {"refresh_mode": "Aktualisierungsmodus", "refresh_interval_min": "Aktualisierungsintervall (Minuten)", "journal_legacy_import": "Legacy-Journal-Import (nur Dry-Run)"}}
+    }
+  }
 }

@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 DOMAIN = "smartcamper_suite"
-VERSION = "0.3.0-beta.2"
+VERSION = "0.3.0-beta.3"
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}.storage"
 CONF_VEHICLES = "vehicles"
@@ -20,7 +20,6 @@ class ModuleName(StrEnum):
     TRAVEL_JOURNAL = "travel_journal"
     FUEL_STATIONS = "fuel_stations"
     ROUTE_PLANNER = "route_planner"
-    BORDER_FORECAST = "border_forecast"
 
 
 DEFAULT_MODULES = {module.value: False for module in ModuleName}

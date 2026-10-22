@@ -102,7 +102,6 @@ class SmartCamperCard extends HTMLElement {
         <option value="travel_journal">Camper Travel Journal</option>
         <option value="fuel_stations">Mobile Fuel Stations</option>
         <option value="route_planner">Camper Route Planner</option>
-        <option value="border_forecast">Wartezeiten Forecast</option>
       </select></label>
       <label>Fahrzeug <input data-field="vehicle_id" placeholder="Fahrzeug-ID (optional)" /></label>
       <label>Darstellung <select data-field="display_mode"><option value="detailed">Detailed</option><option value="compact">Compact</option><option value="individual">Individual</option></select></label>
@@ -410,9 +409,15 @@ class SmartCamperCard extends HTMLElement {
 
 if (typeof window !== "undefined" && typeof customElements !== "undefined") {
   if (!customElements.get("smartcamper-card")) customElements.define("smartcamper-card", SmartCamperCard);
-  const cards = (window as Window & { customCards?: Array<{ type: string }> }).customCards ?? [];
+  const cards = (window as Window & { customCards?: Array<{ type: string; name?: string; description?: string; preview?: boolean; documentationURL?: string }> }).customCards ?? [];
   if (!cards.some((card) => card.type === "smartcamper-card")) {
-    cards.push({ type: "smartcamper-card" });
-    (window as Window & { customCards?: Array<{ type: string }> }).customCards = cards;
+    cards.push({
+      type: "smartcamper-card",
+      name: "SmartCamper Suite",
+      description: "Gemeinsame Karte für Tankstellen, Routenplanung und Reisetagebuch.",
+      preview: true,
+      documentationURL: "https://github.com/balronu/ha-smartcamper-suite#lovelace-karte",
+    });
+    (window as Window & { customCards?: Array<{ type: string; name?: string; description?: string; preview?: boolean; documentationURL?: string }> }).customCards = cards;
   }
 }

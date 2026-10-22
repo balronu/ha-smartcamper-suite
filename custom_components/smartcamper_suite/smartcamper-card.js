@@ -9699,7 +9699,7 @@ function downloadGpx(route, origin, destination, via, mode) {
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-var MODULES = /* @__PURE__ */ new Set(["travel_journal", "fuel_stations", "route_planner", "border_forecast"]);
+var MODULES = /* @__PURE__ */ new Set(["travel_journal", "fuel_stations", "route_planner"]);
 function validateConfig(config) {
   if (!MODULES.has(config.module)) throw new Error("Unknown SmartCamper module");
   return config;
@@ -9788,7 +9788,6 @@ var SmartCamperCard = class extends HTMLElement {
         <option value="travel_journal">Camper Travel Journal</option>
         <option value="fuel_stations">Mobile Fuel Stations</option>
         <option value="route_planner">Camper Route Planner</option>
-        <option value="border_forecast">Wartezeiten Forecast</option>
       </select></label>
       <label>Fahrzeug <input data-field="vehicle_id" placeholder="Fahrzeug-ID (optional)" /></label>
       <label>Darstellung <select data-field="display_mode"><option value="detailed">Detailed</option><option value="compact">Compact</option><option value="individual">Individual</option></select></label>
@@ -10099,7 +10098,13 @@ if (typeof window !== "undefined" && typeof customElements !== "undefined") {
   if (!customElements.get("smartcamper-card")) customElements.define("smartcamper-card", SmartCamperCard);
   const cards = window.customCards ?? [];
   if (!cards.some((card) => card.type === "smartcamper-card")) {
-    cards.push({ type: "smartcamper-card" });
+    cards.push({
+      type: "smartcamper-card",
+      name: "SmartCamper Suite",
+      description: "Gemeinsame Karte f\xFCr Tankstellen, Routenplanung und Reisetagebuch.",
+      preview: true,
+      documentationURL: "https://github.com/balronu/ha-smartcamper-suite#lovelace-karte"
+    });
     window.customCards = cards;
   }
 }

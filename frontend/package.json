@@ -1,0 +1,1 @@
+{"name":"smartcamper-suite-card","private":true,"type":"module","scripts":{"test":"vitest run","build":"tsc --noEmit && esbuild src/smartcamper-card.ts --bundle --format=esm --outfile=../custom_components/smartcamper_suite/smartcamper-card.js"},"devDependencies":{"@types/node":"^22.0.0","esbuild":"^0.24.0","typescript":"^5.7.0","vitest":"^2.1.0"}}

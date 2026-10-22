@@ -25,8 +25,8 @@ productive Home Assistant change was performed.
 | Frontend resource reload | PASS locally | One static route over repeated register/unregister |
 | Frontend Vitest/build | PASS | 2 Vitest tests and TypeScript/esbuild build |
 | Ruff/compileall/JSON/diff | PASS locally | Commands in `docs/development.md` |
-| Hassfest | CI job added; pending | No local Hassfest binary |
-| Secret scan | CI job added; pending | No local Gitleaks binary |
+| Hassfest | PASS in CI | GitHub run 39751680727 |
+| Secret scan | PASS in CI | GitHub run 39751680727 |
 
 ## Fixed defects
 
@@ -50,6 +50,5 @@ productive Home Assistant change was performed.
 
 ## Decision
 
-**NO-GO until CI completes the new Home Assistant 2026.10.1, Hassfest, and
-security jobs successfully.** PR #1 remains open and must not be merged by
-this task.
+**GO: PR #1 is ready to merge.** The PR remains open and was not merged by
+this task. No release was created and Phase 2B was not started.

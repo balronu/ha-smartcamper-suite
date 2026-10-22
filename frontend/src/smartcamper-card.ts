@@ -3,8 +3,10 @@ import {
   type CardConfig,
   renderFuelStateHtml,
   renderRouteHtml,
+  renderJournalHtml,
   type RouteView,
   type RoutePoint,
+  type JournalView,
   buildNavigationLink,
   downloadGpx,
   selectVehicle,
@@ -92,6 +94,27 @@ class SmartCamperCard extends HTMLElement {
 
   private render(): void {
     if (!this.isConnected && typeof document === "undefined") return;
+    if (this.config.module === "travel_journal") {
+      const states = this._hass?.states ?? {};
+      const vehicleId = selectVehicle(this.config, states);
+      const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId && state.attributes?.database === "smartcamper_suite_travel_journal.sqlite");
+      const journal = sensor?.attributes as JournalView | undefined;
+      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions{margin-top:12px}.journal-create{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}</style>${renderJournalHtml(journal, this.config)}`;
+      this.querySelector(".journal-create")?.addEventListener("click", () => {
+        if (vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: vehicleId, title: "Neue Reise" });
+      });
+      const tripId = journal?.active_trip?.id;
+      this.querySelector(".journal-edit")?.addEventListener("click", () => {
+        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", trip_id: tripId, destination: "Bearbeitet" });
+      });
+      this.querySelector(".journal-complete")?.addEventListener("click", () => {
+        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", trip_id: tripId, status: "completed" });
+      });
+      this.querySelector(".journal-delete")?.addEventListener("click", () => {
+        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_delete_trip", { entry_id: "default", trip_id: tripId });
+      });
+      return;
+    }
     if (this.config.module === "route_planner") {
       this.routeMap?.remove();
       const states = this._hass?.states ?? {};

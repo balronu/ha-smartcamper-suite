@@ -9575,6 +9575,12 @@ var require_leaflet_src = __commonJS({
 });
 
 // src/config.ts
+function renderJournalHtml(journal, config) {
+  if (!journal) return `<p class="journal-empty" role="status">Kein Reisetagebuch f\xFCr dieses Fahrzeug verf\xFCgbar.</p>`;
+  const active = journal.active_trip ? `<section class="journal-active" data-trip-id="${escapeHtml(journal.active_trip.id)}"><strong>${escapeHtml(journal.active_trip.title)}</strong><small>${escapeHtml(journal.active_trip.destination ?? "Aktive Reise")}</small><div class="journal-trip-actions"><button type="button" class="journal-edit">Reise bearbeiten</button><button type="button" class="journal-complete">Reise beenden</button><button type="button" class="journal-delete">Reise l\xF6schen</button></div></section>` : `<p class="journal-empty" role="status">Keine aktive Reise.</p>`;
+  const diagnostics = config.show_diagnostics === false ? "" : `<small class="journal-meta">${journal.trip_count ?? 0} Reisen \xB7 ${(journal.expense_total_minor ?? 0) / 100} \u20AC \xB7 ${journal.gps_point_count ?? 0} GPS-Punkte</small>`;
+  return `<article class="journal-card"><header><strong>Camper Travel Journal</strong><small>${escapeHtml(journal.vehicle_id)}</small></header>${active}${diagnostics}<div class="journal-actions"><button type="button" class="journal-create">Neue Reise</button></div></article>`;
+}
 var DEFAULT_LOGO_PATH = "/smartcamper_suite/logos/";
 function selectVehicle(config, states) {
   if (config.vehicle_id) return config.vehicle_id;
@@ -9767,6 +9773,27 @@ var SmartCamperCard = class extends HTMLElement {
   }
   render() {
     if (!this.isConnected && typeof document === "undefined") return;
+    if (this.config.module === "travel_journal") {
+      const states2 = this._hass?.states ?? {};
+      const vehicleId2 = selectVehicle(this.config, states2);
+      const sensor2 = Object.values(states2).find((state) => state.attributes?.vehicle_id === vehicleId2 && state.attributes?.database === "smartcamper_suite_travel_journal.sqlite");
+      const journal = sensor2?.attributes;
+      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions{margin-top:12px}.journal-create{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}</style>${renderJournalHtml(journal, this.config)}`;
+      this.querySelector(".journal-create")?.addEventListener("click", () => {
+        if (vehicleId2 && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: vehicleId2, title: "Neue Reise" });
+      });
+      const tripId = journal?.active_trip?.id;
+      this.querySelector(".journal-edit")?.addEventListener("click", () => {
+        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", trip_id: tripId, destination: "Bearbeitet" });
+      });
+      this.querySelector(".journal-complete")?.addEventListener("click", () => {
+        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", trip_id: tripId, status: "completed" });
+      });
+      this.querySelector(".journal-delete")?.addEventListener("click", () => {
+        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_delete_trip", { entry_id: "default", trip_id: tripId });
+      });
+      return;
+    }
     if (this.config.module === "route_planner") {
       this.routeMap?.remove();
       const states2 = this._hass?.states ?? {};

@@ -17,6 +17,7 @@ from .auth import CredentialStore
 from .const import CONF_NAKORDONI_AUTH_METHOD, DOMAIN, ModuleName
 from .frontend import async_register_frontend, async_unregister_frontend
 from .fuel_stations import FuelProviderRegistry, FuelStationsRuntime, ProviderResponse
+from .journal import JournalRuntime, JournalStore, JournalVehicle
 from .models import Vehicle
 from .modules import ModuleManager
 from .oauth2 import async_register as async_register_oauth
@@ -29,6 +30,12 @@ SERVICE_SET_CREDENTIAL = "set_credential"
 SERVICE_REMOVE_CREDENTIAL = "remove_credential"
 SERVICE_REFRESH_FUEL = "refresh_fuel_stations"
 SERVICE_CALCULATE_ROUTE = "calculate_route"
+SERVICE_JOURNAL_CREATE_TRIP = "journal_create_trip"
+SERVICE_JOURNAL_UPDATE_TRIP = "journal_update_trip"
+SERVICE_JOURNAL_DELETE_TRIP = "journal_delete_trip"
+SERVICE_JOURNAL_CREATE_STAY = "journal_create_stay"
+SERVICE_JOURNAL_CREATE_STOP = "journal_create_stop"
+SERVICE_JOURNAL_CREATE_EXPENSE = "journal_create_expense"
 _CREDENTIAL_SCHEMA = vol.Schema({
     vol.Required("entry_id"): str,
     vol.Required("credential_id"): str,
@@ -48,6 +55,25 @@ _ROUTE_SCHEMA = vol.Schema({
     vol.Optional("alternatives", default=0): vol.All(int, vol.Range(min=0, max=2)),
     vol.Optional("traffic", default="off"): vol.In(("off", "forecast", "live")),
 })
+_JOURNAL_TRIP_SCHEMA = vol.Schema({
+    vol.Optional("entry_id"): str,
+    vol.Required("vehicle_id"): str,
+    vol.Required("title"): str,
+    vol.Optional("description", default=""): str,
+    vol.Optional("destination", default=""): str,
+    vol.Optional("status", default="planned"): vol.In(("planned", "active", "completed", "cancelled")),
+})
+_JOURNAL_ID_SCHEMA = vol.Schema({vol.Optional("entry_id"): str, vol.Required("trip_id"): str})
+_JOURNAL_ITEM_SCHEMA = vol.Schema({
+    vol.Optional("entry_id"): str,
+    vol.Required("vehicle_id"): str,
+    vol.Optional("trip_id"): str,
+    vol.Optional("name", default=""): str,
+    vol.Optional("category", default="other"): str,
+    vol.Optional("amount_minor", default=0): int,
+    vol.Optional("currency", default="EUR"): str,
+    vol.Optional("note", default=""): str,
+})
 
 
 @dataclass(slots=True)
@@ -59,16 +85,22 @@ class SuiteRuntime:
     store: SuiteStore
     fuel: FuelStationsRuntime
     route: RoutePlannerRuntime
+    journal: JournalRuntime
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_register_frontend(hass)
+    from .journal_api import async_register as async_register_journal_api
+    async_register_journal_api(hass)
     domain_data = hass.data.setdefault(DOMAIN, {})
     if not domain_data.get("oauth_registered"):
         async_register_oauth(hass)
         domain_data["oauth_registered"] = True
     store = await hass.async_add_executor_job(
         SuiteStore, hass.config.path(".storage", "smartcamper_suite.sqlite")
+    )
+    journal_store = await hass.async_add_executor_job(
+        JournalStore, hass.config.path(".storage", "smartcamper_suite_travel_journal.sqlite")
     )
     providers = ProviderRegistry()
     credentials = CredentialStore()
@@ -144,8 +176,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return {**payload, "status": response.status, "headers": response.headers}
 
     route = RoutePlannerRuntime(vehicles, nakordoni_credential, route_transport)
+    journal_vehicles = {
+        vehicle_id: JournalVehicle(vehicle_id, vehicle.name, vehicle.tracker_entity_id)
+        for vehicle_id, vehicle in vehicles.items()
+    }
+    journal = JournalRuntime(
+        journal_store,
+        journal_vehicles,
+        bool(entry.options.get("modules", {}).get(ModuleName.TRAVEL_JOURNAL.value, False)),
+    )
     runtime = SuiteRuntime(
-        providers, credentials, ApiClient(), ModuleManager(entry.options.get("modules")), store, fuel, route
+        providers, credentials, ApiClient(), ModuleManager(entry.options.get("modules")), store, fuel, route, journal
     )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
     if hasattr(hass, "services") and not hass.services.has_service(DOMAIN, SERVICE_SET_CREDENTIAL):
@@ -153,7 +194,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(DOMAIN, SERVICE_REMOVE_CREDENTIAL, _async_remove_credential, _REMOVE_CREDENTIAL_SCHEMA)
         hass.services.async_register(DOMAIN, SERVICE_REFRESH_FUEL, _async_refresh_fuel, _REFRESH_FUEL_SCHEMA)
         hass.services.async_register(DOMAIN, SERVICE_CALCULATE_ROUTE, _async_calculate_route, _ROUTE_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_JOURNAL_CREATE_TRIP, _async_journal_create_trip, _JOURNAL_TRIP_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_JOURNAL_UPDATE_TRIP, _async_journal_update_trip, _JOURNAL_ID_SCHEMA.extend({vol.Optional("title"): str, vol.Optional("description"): str, vol.Optional("destination"): str, vol.Optional("status"): str}))
+        hass.services.async_register(DOMAIN, SERVICE_JOURNAL_DELETE_TRIP, _async_journal_delete_trip, _JOURNAL_ID_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_JOURNAL_CREATE_STAY, _async_journal_create_stay, _JOURNAL_ITEM_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_JOURNAL_CREATE_STOP, _async_journal_create_stop, _JOURNAL_ITEM_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_JOURNAL_CREATE_EXPENSE, _async_journal_create_expense, _JOURNAL_ITEM_SCHEMA)
     await runtime.modules.async_setup(runtime)
+    await runtime.journal.async_start(hass)
     await runtime.fuel.async_start_background(
         hass,
         runtime.modules.modules[ModuleName.FUEL_STATIONS].started,
@@ -219,9 +267,58 @@ async def _async_calculate_route(call: Any) -> None:
         await runtime.route.async_calculate(dict(call.data))
 
 
+def _journal_runtime(call: Any) -> SuiteRuntime:
+    runtime = call.hass.data[DOMAIN].get(call.data.get("entry_id")) if call.data.get("entry_id") else next(
+        (value for value in call.hass.data[DOMAIN].values() if isinstance(value, SuiteRuntime)), None
+    )
+    if not isinstance(runtime, SuiteRuntime):
+        raise TypeError("entry_not_loaded")
+    return runtime
+
+
+async def _async_journal_create_trip(call: Any) -> None:
+    runtime = _journal_runtime(call)
+    await call.hass.async_add_executor_job(
+        runtime.journal.store.create_trip,
+        call.data["vehicle_id"],
+        call.data["title"],
+        **{key: call.data[key] for key in ("description", "destination", "status") if key in call.data},
+    )
+
+
+async def _async_journal_update_trip(call: Any) -> None:
+    runtime = _journal_runtime(call)
+    fields = {key: call.data[key] for key in ("title", "description", "destination", "status") if key in call.data}
+    await call.hass.async_add_executor_job(runtime.journal.store.update_trip, call.data["trip_id"], **fields)
+
+
+async def _async_journal_delete_trip(call: Any) -> None:
+    runtime = _journal_runtime(call)
+    await call.hass.async_add_executor_job(runtime.journal.store.delete_trip, call.data["trip_id"])
+
+
+async def _async_journal_create_stay(call: Any) -> None:
+    runtime = _journal_runtime(call)
+    fields = {key: call.data[key] for key in ("trip_id", "name") if key in call.data}
+    await call.hass.async_add_executor_job(runtime.journal.store.create_stay, call.data["vehicle_id"], **fields)
+
+
+async def _async_journal_create_stop(call: Any) -> None:
+    runtime = _journal_runtime(call)
+    fields = {key: call.data[key] for key in ("trip_id", "name", "category") if key in call.data}
+    await call.hass.async_add_executor_job(runtime.journal.store.create_stop, call.data["vehicle_id"], **fields)
+
+
+async def _async_journal_create_expense(call: Any) -> None:
+    runtime = _journal_runtime(call)
+    fields = {key: call.data[key] for key in ("trip_id", "category", "amount_minor", "currency", "note") if key in call.data}
+    await call.hass.async_add_executor_job(runtime.journal.store.create_expense, call.data["vehicle_id"], **fields)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime: SuiteRuntime = hass.data[DOMAIN].pop(entry.entry_id)
     await runtime.fuel.async_unload()
+    await runtime.journal.async_stop()
     await runtime.modules.async_unload()
     await hass.async_add_executor_job(runtime.store.close)
     if not any(key != "_frontend" for key in hass.data[DOMAIN]):

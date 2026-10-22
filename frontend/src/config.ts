@@ -56,6 +56,26 @@ export type RouteView = {
 
 export type RoutePoint = { latitude: number; longitude: number; label?: string };
 
+export type JournalView = {
+  vehicle_id: string;
+  state?: string;
+  trip_count?: number;
+  active_trip_count?: number;
+  active_trip?: { id: string; title: string; destination?: string; status?: string } | null;
+  expense_total_minor?: number;
+  gps_point_count?: number;
+  database?: string;
+};
+
+export function renderJournalHtml(journal: JournalView | undefined, config: CardConfig): string {
+  if (!journal) return `<p class="journal-empty" role="status">Kein Reisetagebuch für dieses Fahrzeug verfügbar.</p>`;
+  const active = journal.active_trip
+    ? `<section class="journal-active" data-trip-id="${escapeHtml(journal.active_trip.id)}"><strong>${escapeHtml(journal.active_trip.title)}</strong><small>${escapeHtml(journal.active_trip.destination ?? "Aktive Reise")}</small><div class="journal-trip-actions"><button type="button" class="journal-edit">Reise bearbeiten</button><button type="button" class="journal-complete">Reise beenden</button><button type="button" class="journal-delete">Reise löschen</button></div></section>`
+    : `<p class="journal-empty" role="status">Keine aktive Reise.</p>`;
+  const diagnostics = config.show_diagnostics === false ? "" : `<small class="journal-meta">${journal.trip_count ?? 0} Reisen · ${(journal.expense_total_minor ?? 0) / 100} € · ${journal.gps_point_count ?? 0} GPS-Punkte</small>`;
+  return `<article class="journal-card"><header><strong>Camper Travel Journal</strong><small>${escapeHtml(journal.vehicle_id)}</small></header>${active}${diagnostics}<div class="journal-actions"><button type="button" class="journal-create">Neue Reise</button></div></article>`;
+}
+
 export type FuelStationView = {
   station_id: string;
   name: string;

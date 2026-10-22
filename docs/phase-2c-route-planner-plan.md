@@ -20,7 +20,7 @@ nicht geändert und bleibt eine eigenständige Integration.
 | Warnung über 3,5 t, Schweiz und Durchfahrtsverbote | übernommen | sichtbare Providerwarnungen; keine Rechtsgarantie |
 | GPX Route, Track und Combined | übernommen und im Browser downloadbar | lokaler Download ohne Providerzugriff; Zwischenstopps bleiben in `<rte>` erhalten |
 | Sygic-Übergabe | übernommen | GPX-Download ist der dokumentierte Sygic-Übergabepfad; kein unbestätigter Deep-Link |
-| Kartenansicht | übernommen | `custom:smartcamper-card` zeigt Geometrie, Distanz, Dauer, Warnungen und Navigation |
+| Kartenansicht | übernommen | Leaflet-Polylinie plus lokaler SVG-Fallback; `custom:smartcamper-card` zeigt Geometrie, Distanz, Dauer, Warnungen und Navigation |
 | visueller Editor | übernommen | Modul, Fahrzeug, Start/Ziel, Zwischenstopp hinzufügen/entfernen |
 | automatische Routenberechnung | bewusst nicht übernommen | Berechnung ausschließlich durch explizite Aktion, um Quoten und Kosten zu schützen |
 | Kartenkacheln/Geocoding | Suite-Grenze | vorhandene zentrale Provider-Registry; keine zweiten Credential-Speicher |

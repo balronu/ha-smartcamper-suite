@@ -10,6 +10,7 @@ import {
   selectVehicle,
   validateConfig,
 } from "./config";
+import * as L from "leaflet";
 
 type HassState = { state?: string; attributes?: Record<string, unknown> };
 type HassLike = { states?: Record<string, HassState>; callService?: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown> };
@@ -18,6 +19,7 @@ class SmartCamperCard extends HTMLElement {
   private config: CardConfig = { type: "custom:smartcamper-card", module: "travel_journal" };
   private _hass?: HassLike;
   private routeVia: RoutePoint[] = [];
+  private routeMap?: L.Map;
 
   setConfig(raw: CardConfig): void {
     this.config = validateConfig(raw);
@@ -91,6 +93,7 @@ class SmartCamperCard extends HTMLElement {
   private render(): void {
     if (!this.isConnected && typeof document === "undefined") return;
     if (this.config.module === "route_planner") {
+      this.routeMap?.remove();
       const states = this._hass?.states ?? {};
       const vehicleId = selectVehicle(this.config, states);
       const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId && state.attributes?.beta !== undefined);
@@ -106,11 +109,23 @@ class SmartCamperCard extends HTMLElement {
       const navigation = buildNavigationLink(origin, destination);
       const exportButtons = route?.state === "ready" && origin && destination
         ? `<div class="route-actions"><button class="route-gpx" data-mode="route" type="button">GPX-Route</button><button class="route-gpx" data-mode="track" type="button">GPX-Track</button><button class="route-gpx" data-mode="combined" type="button">GPX kombiniert</button>${navigation ? `<a class="route-navigation" href="${navigation}" target="_blank" rel="noopener">Im Navi öffnen</a>` : ""}</div>` : "";
-      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;cursor:crosshair}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-error{color:var(--error-color,#d32f2f)}.route-calculate,.route-gpx,.route-actions a,.route-reset{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzufügen</button> <button class="route-reset" type="button">Route zurücksetzen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
+      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-leaflet-map{width:100%;height:180px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;margin-bottom:8px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;cursor:crosshair}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-error{color:var(--error-color,#d32f2f)}.route-calculate,.route-gpx,.route-actions a,.route-reset{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzufügen</button> <button class="route-reset" type="button">Route zurücksetzen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
       this.querySelector(".route-add")?.addEventListener("click", () => {
         this.routeVia = [...via, { latitude: origin?.latitude ?? 0, longitude: origin?.longitude ?? 0 }];
         this.render();
       });
+      const leafletHost = this.querySelector<HTMLElement>(".route-leaflet-map");
+      if (leafletHost && route?.geometry && route.geometry.length > 1) {
+        try {
+          this.routeMap = L.map(leafletHost, { zoomControl: false, attributionControl: false });
+          const line = route.geometry.map((point) => [point.latitude, point.longitude] as [number, number]);
+          this.routeMap.fitBounds(line, { padding: [10, 10] });
+          L.polyline(line, { color: "#03a9f4", weight: 5 }).addTo(this.routeMap);
+          window.setTimeout(() => this.routeMap?.invalidateSize(), 0);
+        } catch {
+          this.routeMap = undefined;
+        }
+      }
       this.querySelector(".route-map")?.addEventListener("click", (event) => {
         const geometry = route?.geometry ?? [];
         if (geometry.length < 2) return;

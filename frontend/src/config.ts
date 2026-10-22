@@ -161,7 +161,7 @@ export function renderRouteHtml(route: RouteView | undefined, config: CardConfig
     : "";
   const tolls = route.metadata?.tolls;
   const tollText = tolls ? ` · Maut: ${tolls.total == null ? "unbekannt" : `${tolls.total.toFixed(2)} ${tolls.currency ?? "EUR"}`}${tolls.estimate ? " (Schätzung)" : ""}` : "";
-  return `${map}<p class="route-summary"><strong>${distance}</strong> · ${duration} · ${escapeHtml(route.provider ?? "unbekannt")}${tollText}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
+  return `<div class="route-leaflet-map" role="img" aria-label="Interaktive Routenkarte"></div>${map}<p class="route-summary"><strong>${distance}</strong> · ${duration} · ${escapeHtml(route.provider ?? "unbekannt")}${tollText}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
 }
 
 export function buildNavigationLink(origin: RoutePoint | undefined, destination: RoutePoint | undefined): string | null {

@@ -1,17 +1,13 @@
 {
   "config": {
-    "abort": {
-      "single_instance_allowed": "Only one SmartCamper Suite entry is supported.",
-      "oauth_implementation_unavailable": "The Nakordoni OAuth configuration is unavailable.",
-      "oauth_timeout": "The Nakordoni sign-in timed out.",
-      "oauth_failed": "The Nakordoni sign-in failed.",
-      "oauth_error": "Nakordoni did not return a valid sign-in."
-    },
+    "abort": {"single_instance_allowed": "Only one SmartCamper Suite entry is supported.", "oauth_implementation_unavailable": "Nakordoni OAuth is not available.", "oauth_timeout": "Nakordoni sign-in timed out.", "oauth_failed": "Nakordoni sign-in failed.", "oauth_error": "Nakordoni did not return a valid sign-in."},
     "step": {
-      "vehicle": {"title": "Vehicle and GPS", "description": "Create a vehicle and select its GPS tracker.", "data": {"name": "Vehicle name", "tracker_entity_id": "GPS tracker", "length_m": "Length (m)", "width_m": "Width (m)", "height_m": "Height (m)", "weight_t": "Weight (t)", "axle_count": "Axles", "fuel_types": "Fuel types (comma-separated)"}},
-      "providers": {"title": "Providers", "description": "API keys are stored only in the Config Entry. Leave unused providers empty.", "data": {"tankerkoenig_api_key": "Tankerkönig API key", "petromap_api_key": "Petromap API key", "nakordoni_api_key": "Nakordoni API key", "nakordoni_oauth": "Sign in to Nakordoni with OAuth"}},
-      "modules": {"title": "Modules", "description": "Enable only the three available Suite modules.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
-      "common": {"title": "Shared settings", "description": "Set refresh behavior and safe import boundaries.", "data": {"refresh_mode": "Refresh mode", "refresh_interval_min": "Refresh interval (minutes)", "journal_legacy_import": "Legacy journal import (dry-run only)"}}
+      "providers": {"title": "Providers & API access", "description": "Enable providers independently. The same provider account can be shared by all vehicles.", "data": {"enabled_providers": "Enabled providers"}},
+      "provider_credentials": {"title": "Provider credentials", "description": "Leave blank to keep the stored credential. Stored keys are never shown again.", "data": {"tankerkoenig_api_key": "Tankerkönig API key", "petromap_api_key": "Petromap API key", "nakordoni_api_key": "Nakordoni API key", "nakordoni_oauth": "Sign in to Nakordoni with OAuth"}},
+      "vehicles": {"title": "Manage vehicles", "description": "Add, edit or remove vehicles without changing global provider access.", "data": {"action": "Vehicle action", "vehicle_id": "Vehicle"}},
+      "vehicle": {"title": "Vehicle details", "description": "Choose the GPS tracker and supported fuels. Dimensions are optional.", "data": {"name": "Vehicle name", "tracker_entity_id": "GPS tracker", "length_m": "Length (m)", "width_m": "Width (m)", "height_m": "Height (m)", "weight_t": "Weight (t)", "axle_count": "Number of axles", "fuel_types": "Supported fuels"}, "selector": {"fuel_types": {"options": {"diesel": "Diesel", "e5": "Petrol E5", "e10": "Petrol E10", "lpg": "LPG", "hvo100": "HVO100"}}}},
+      "modules": {"title": "Modules", "description": "Enable the suite modules you want to use.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
+      "common": {"title": "Refresh & general settings", "description": "Choose how often the suite refreshes its data.", "data": {"refresh_mode": "Refresh mode", "refresh_interval_min": "Refresh interval (minutes)"}}
     }
   }
 }

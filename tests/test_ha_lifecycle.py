@@ -66,17 +66,30 @@ def test_config_flow_and_options_flow_are_available_without_credentials():
         flow.context = {}
         form = await flow.async_step_user()
         assert form["type"] == "form"
-        assert form["step_id"] == "vehicle"
-        providers = await flow.async_step_vehicle({"name": "Wohnmobil", "tracker_entity_id": "device_tracker.wohnmobil_zoe", "fuel_types": "diesel,e5"})
-        assert providers["step_id"] == "providers"
-        modules = await flow.async_step_providers({})
+        assert form["step_id"] == "providers"
+        credentials = await flow.async_step_providers({"enabled_providers": ["tankerkoenig", "nakordoni"]})
+        assert credentials["step_id"] == "provider_credentials"
+        vehicles = await flow.async_step_provider_credentials({"tankerkoenig_api_key": "synthetic-key"})
+        assert vehicles["step_id"] == "vehicles"
+        vehicle_form = await flow.async_step_vehicles({"action": "add"})
+        assert vehicle_form["step_id"] == "vehicle"
+        vehicle_done = await flow.async_step_vehicle({"name": "Wohnmobil", "tracker_entity_id": "device_tracker.wohnmobil_zoe", "fuel_types": ["diesel", "e5"], "length_m": 7.5, "width_m": 2.3, "height_m": 3.1, "weight_t": 4.2, "axle_count": "2"})
+        assert vehicle_done["step_id"] == "vehicles"
+        second_form = await flow.async_step_vehicles({"action": "add"})
+        assert second_form["step_id"] == "vehicle"
+        second_done = await flow.async_step_vehicle({"name": "Opel", "tracker_entity_id": "device_tracker.opel", "fuel_types": ["e5"], "axle_count": "2"})
+        assert second_done["step_id"] == "vehicles"
+        modules = await flow.async_step_vehicles({"action": "done", "vehicle_id": ""})
         assert modules["step_id"] == "modules"
         common = await flow.async_step_modules({"travel_journal": True, "fuel_stations": True, "route_planner": True})
         assert common["step_id"] == "common"
-        result = await flow.async_step_common({"refresh_mode": "automatic", "refresh_interval_min": 15, "journal_legacy_import": False})
+        result = await flow.async_step_common({"refresh_mode": "automatic", "refresh_interval_min": 15})
         assert result["type"] == "create_entry"
         assert result["options"]["modules"] == {key: True for key in DEFAULT_MODULES}
         assert result["options"]["vehicles"][0]["tracker_entity_id"] == "device_tracker.wohnmobil_zoe"
+        assert result["options"]["vehicles"][1]["name"] == "Opel"
+        assert result["options"]["enabled_providers"] == ["tankerkoenig", "nakordoni"]
+        assert result["data"]["credentials"]["tankerkoenig-api-key"]["api_key"] == "synthetic-key"
 
         existing = SmartCamperConfigFlow()
         existing.hass = SimpleNamespace(
@@ -88,16 +101,56 @@ def test_config_flow_and_options_flow_are_available_without_credentials():
         config_entry = make_entry()
         options = SmartCamperOptionsFlow()
         options.hass = SimpleNamespace(
-            config_entries=SimpleNamespace(async_get_known_entry=lambda _entry_id: config_entry)
+            config_entries=SimpleNamespace(async_get_known_entry=lambda _entry_id: config_entry, async_update_entry=lambda *args, **kwargs: None)
         )
         options.handler = config_entry.entry_id
-        assert (await options.async_step_init())["step_id"] == "vehicle"
-        assert (await options.async_step_vehicle({"name": "Wohnmobil", "fuel_types": "diesel"}))["step_id"] == "providers"
-        assert (await options.async_step_providers({}))["step_id"] == "modules"
+        assert (await options.async_step_init())["step_id"] == "providers"
+        assert (await options.async_step_providers({"enabled_providers": ["petromap"]}))["step_id"] == "provider_credentials"
+        assert (await options.async_step_provider_credentials({}))["step_id"] == "vehicles"
+        assert (await options.async_step_vehicles({"action": "add"}))["step_id"] == "vehicle"
+        assert (await options.async_step_vehicle({"name": "Wohnmobil", "fuel_types": ["diesel"], "axle_count": "2"}))["step_id"] == "vehicles"
+        assert (await options.async_step_vehicles({"action": "done"}))["step_id"] == "modules"
         assert (await options.async_step_modules({ModuleName.ROUTE_PLANNER.value: True}))["step_id"] == "common"
-        option_result = await options.async_step_common({"refresh_mode": "manual", "refresh_interval_min": 30, "journal_legacy_import": False})
+        option_result = await options.async_step_common({"refresh_mode": "manual", "refresh_interval_min": 30})
         assert option_result["type"] == "create_entry"
         assert option_result["data"]["modules"][ModuleName.ROUTE_PLANNER.value] is True
+
+    asyncio.run(run())
+
+
+def test_options_flow_edits_and_removes_one_vehicle_without_losing_global_provider():
+    async def run():
+        first = {"vehicle_id": "first", "name": "Wohnmobil", "tracker_entity_id": "device_tracker.womo", "fuel_types": ["diesel"], "axle_count": 2}
+        second = {"vehicle_id": "second", "name": "Opel", "tracker_entity_id": "device_tracker.opel", "fuel_types": ["e5"], "axle_count": 2}
+        entry = make_entry({
+            "vehicles": [first, second],
+            "enabled_providers": ["tankerkoenig", "nakordoni"],
+            "provider_accounts": {"tankerkoenig": {"credential_id": "tankerkoenig-api-key"}, "nakordoni": {"credential_id": "nakordoni-api-key"}},
+            "modules": dict(DEFAULT_MODULES),
+            "refresh_mode": "automatic",
+            "refresh_interval_min": 15,
+        })
+        entry = ConfigEntry(
+            data={"credentials": {"tankerkoenig-api-key": {"provider": "tankerkoenig", "api_key": "synthetic"}, "nakordoni-api-key": {"provider": "nakordoni", "api_key": "synthetic2"}}},
+            domain=DOMAIN, title="SmartCamper Suite", source="user", version=1, minor_version=0,
+            options=entry.options, entry_id="suite-edit", unique_id=None, discovery_keys=MappingProxyType({}), subentries_data=None,
+        )
+        options = SmartCamperOptionsFlow()
+        options.hass = SimpleNamespace(config_entries=SimpleNamespace(async_get_known_entry=lambda _entry_id: entry, async_update_entry=lambda *args, **kwargs: None))
+        options.handler = entry.entry_id
+        assert (await options.async_step_init())["step_id"] == "providers"
+        assert (await options.async_step_providers({"enabled_providers": ["tankerkoenig", "nakordoni"]}))["step_id"] == "provider_credentials"
+        assert (await options.async_step_provider_credentials({}))["step_id"] == "vehicles"
+        assert (await options.async_step_vehicles({"action": "edit", "vehicle_id": "first"}))["step_id"] == "vehicle"
+        assert (await options.async_step_vehicle({**first, "name": "Wohnmobil XL", "axle_count": "2"}))["step_id"] == "vehicles"
+        assert (await options.async_step_vehicles({"action": "remove", "vehicle_id": "second"}))["step_id"] == "vehicles"
+        assert (await options.async_step_vehicles({"action": "done"}))["step_id"] == "modules"
+        assert (await options.async_step_modules(dict(DEFAULT_MODULES)))["step_id"] == "common"
+        result = await options.async_step_common({"refresh_mode": "automatic", "refresh_interval_min": 15})
+        vehicles = result["data"]["vehicles"]
+        assert [vehicle["name"] for vehicle in vehicles] == ["Wohnmobil XL"]
+        assert result["data"]["enabled_providers"] == ["tankerkoenig", "nakordoni"]
+        assert result["data"]["provider_accounts"]["nakordoni"]["credential_id"] == "nakordoni-api-key"
 
     asyncio.run(run())
 

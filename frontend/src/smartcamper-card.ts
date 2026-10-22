@@ -142,7 +142,7 @@ class SmartCamperCard extends HTMLElement {
   }
 
   getStubConfig(): CardConfig {
-    return { type: "custom:smartcamper-card", module: "fuel_stations" };
+    return { module: "fuel_stations" };
   }
 
   getCardSize(): number {

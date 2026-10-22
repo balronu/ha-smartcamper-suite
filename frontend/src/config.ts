@@ -1,5 +1,5 @@
 export type CardConfig = {
-  type: string;
+  type?: string;
   module: string;
   vehicle_id?: string;
   display_mode?: "detailed" | "compact" | "individual";

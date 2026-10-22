@@ -1,0 +1,83 @@
+{
+  "reference": {
+    "repository": "balronu/ha-camper-travel-journal",
+    "version": "v0.3.2",
+    "commit": "11a98f966110d2e70aeb5181b66bc4d97c373623"
+  },
+  "suite_commit_reviewed": "c8ffd7a05a1ca950051d023829d9aaea9f41c7db",
+  "status": "open_gaps_are_concrete",
+  "gaps": [
+    {
+      "id": "ws-vehicle-scope-update-trip",
+      "stable": {"file": "custom_components/camper_travel_journal/api.py", "function": "ws_update_trip", "required": ["vehicle_id", "trip_id"]},
+      "suite": {"file": "custom_components/smartcamper_suite/journal_api.py", "function": "ws_update_trip", "required": ["trip_id"]},
+      "difference": "The Suite command does not require or validate vehicle_id.",
+      "affected": ["vehicle ownership and cross-vehicle authorization boundary"],
+      "user_impact": "A caller can address a trip by id without supplying the Stable vehicle scope.",
+      "test": "tests/test_websocket_contract.py::test_contract_matrix_matches_documented_commands",
+      "priority": "high",
+      "status": "open"
+    },
+    {
+      "id": "ws-vehicle-scope-mutations",
+      "stable": {"file": "custom_components/camper_travel_journal/api.py", "functions": ["ws_delete_trip", "ws_transition_trip", "ws_link_drives", "ws_unlink_drive", "ws_update_manual_drive", "ws_delete_manual_drive", "ws_update_stop", "ws_delete_stop", "ws_update_expense", "ws_delete_expense", "ws_update_overnight", "ws_update_rating", "ws_delete_rating", "ws_accept_stop_suggestion", "ws_dismiss_stop_suggestion"], "required": ["vehicle_id"]},
+      "suite": {"file": "custom_components/smartcamper_suite/journal_api.py", "functions": ["ws_delete_trip", "ws_transition_trip", "ws_link_drives", "ws_unlink_drive", "ws_update_manual_drive", "ws_delete_manual_drive", "ws_update_stop", "ws_delete_stop", "ws_update_expense", "ws_delete_expense", "ws_upsert_overnight", "ws_upsert_rating", "ws_delete_rating", "ws_accept_suggestion", "ws_dismiss_suggestion"], "required": ["entry_id"], "missing": ["vehicle_id"]},
+      "difference": "Mutation commands use object ids without the Stable vehicle_id scope; overnight/rating/suggestion commands also use Suite-specific names.",
+      "affected": ["vehicle isolation", "contract compatibility"],
+      "user_impact": "The same command cannot be validated against the selected vehicle in the Stable-compatible way.",
+      "test": "tests/test_websocket_contract.py::test_contract_matrix_matches_documented_commands",
+      "priority": "high",
+      "status": "open"
+    },
+    {
+      "id": "ws-import-gpx-file-hash",
+      "stable": {"file": "custom_components/camper_travel_journal/api.py", "function": "ws_import_gpx", "required": ["content_base64", "file_hash"]},
+      "suite": {"file": "custom_components/smartcamper_suite/journal_api.py", "function": "ws_import_gpx", "required": ["vehicle_id", "content_base64"]},
+      "difference": "The Suite import path does not require the Stable file_hash idempotency key.",
+      "affected": ["duplicate import detection"],
+      "user_impact": "A client cannot rely on the Stable request contract to prevent repeated file imports.",
+      "test": "tests/test_journal.py::test_legacy_import_requires_opt_in_is_idempotent_and_preserves_source",
+      "priority": "high",
+      "status": "open"
+    },
+    {
+      "id": "ws-route-processing",
+      "stable": {"file": "custom_components/camper_travel_journal/api.py", "function": "ws_route", "parameters": ["max_points", "simplify_tolerance_m"]},
+      "suite": {"file": "custom_components/smartcamper_suite/journal_api.py", "function": "ws_route", "parameters": ["max_points", "simplify_tolerance_m"]},
+      "difference": "The Suite accepts both parameters but currently returns the full stored geometry and hard-codes truncated=false; it does not apply truncation or simplification.",
+      "affected": ["large-track rendering", "route response semantics"],
+      "user_impact": "Large tracks can exceed the requested rendering limit and simplification is not honored.",
+      "test": "tests/test_journal_contract.py::test_route_contract_fields",
+      "priority": "medium",
+      "status": "open"
+    },
+    {
+      "id": "ui-journal-editing",
+      "stable": {"file": "custom_components/camper_travel_journal/frontend/camper-travel-journal.js", "functions": ["trip/stay/stop/expense/drive editors", "interruption assignment", "GPX/PDF actions"]},
+      "suite": {"file": "frontend/src/smartcamper-card.ts", "functions": ["journal list and manual-drive creation", "delete-drive", "PDF action"]},
+      "difference": "The Suite browser fixture proves listing, manual-drive creation and PDF download, but does not expose the Stable editing/assignment workflows for stays, costs, interruptions, ratings and overnight data.",
+      "affected": ["journal card parity", "visual editor parity"],
+      "user_impact": "Several Stable journal workflows are not reachable from the central Suite card.",
+      "test": "frontend/tests/browser/card.spec.mjs::journal workflow assertions",
+      "priority": "high",
+      "status": "open"
+    },
+    {
+      "id": "ha-full-lifecycle",
+      "stable": {"file": "tests/test_real_coexistence.py", "function": "test_real_four_integration_coexistence"},
+      "suite": {"file": "tests/test_real_coexistence.py", "function": "test_real_four_integration_coexistence"},
+      "difference": "The executed harness initializes the real component setup paths in a temporary Home Assistant context, but does not yet execute ConfigEntry reload/unload/re-setup, simulated restart, or Suite removal assertions.",
+      "affected": ["lifecycle safety", "legacy coexistence"],
+      "user_impact": "Those lifecycle guarantees remain unproven before a production-like test.",
+      "test": "tests/test_real_coexistence.py::test_real_four_integration_coexistence",
+      "priority": "blocker",
+      "status": "open",
+      "execution": "partial_pass"
+    }
+  ],
+  "closed_checks": [
+    {"id": "historical-expense-fields", "evidence": "custom_components/smartcamper_suite/journal.py, tests/test_journal.py::test_expense_historical_fields_round_trip", "status": "closed"},
+    {"id": "automatic-drive-baseline", "evidence": "custom_components/smartcamper_suite/journal.py, tests/test_journal.py::test_automatic_drive_detection_is_gap_aware_and_idempotent", "status": "closed_for_baseline"},
+    {"id": "gpx-ordered-geometry", "evidence": "tests/test_journal.py::test_gpx_import_persists_ordered_geometry_and_route_segments", "status": "closed"}
+  ]
+}

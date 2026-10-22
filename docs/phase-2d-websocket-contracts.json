@@ -80,8 +80,8 @@
     "full_parity": false,
     "known_differences": [
       "Historical namespace is not duplicated; the suite namespace is used.",
-      "Some legacy optional fields (for example occurred_on/occurred_time, odometer_km, stay_id and place_id) are not yet persisted.",
-      "The suite now persists GPX drive geometry; automatic movement-based drive segmentation remains incomplete.",
+      "Historical expense fields occurred_on/occurred_time, odometer_km, stay_id and place_id are persisted in schema version 4.",
+      "The suite now persists GPX drive geometry and provides a baseline automatic movement-based detector; full Stable edge-case parity remains open.",
       "The suite uses upsert names for overnight and rating updates."
     ]
   }

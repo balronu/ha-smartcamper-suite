@@ -110,6 +110,7 @@ try {
       if (message.type.endsWith("list_drives")) return { drives: [{ id: "drive_1", source: "manual", started_at: "2026-01-01T10:00:00Z", ended_at: "2026-01-01T10:30:00Z" }] };
       if (message.type.endsWith("list_suggestions")) return { suggestions: [{ id: "suggestion_1", arrived_at: "2026-01-01T11:00:00Z" }] };
       if (message.type.endsWith("export_pdf")) return { pdf_base64: "JVBERi0xLjQKJSVFT0YK", filename: "journal.pdf" };
+      if (window.journalFail) throw new Error("simulated websocket failure");
       return {};
     };
     document.querySelector("#first").hass = hassObject;
@@ -124,20 +125,48 @@ try {
   await page.locator("#first input[name=occurred_at]").fill("2026-01-01T10:00");
   await page.locator("#first .journal-drive-form button").click();
   assert.equal((await page.evaluate(() => window.journalWsCalls.filter((message) => message.type.endsWith("create_manual_drive")).length)), 1);
-  await page.locator("#first .journal-stay-create").click();
-  await page.locator("#first .journal-stay-edit").click();
+  const cancelDialog = async (selector) => {
+    await page.locator(`#first ${selector}`).first().click();
+    await page.locator("#first .journal-editor-dialog").waitFor();
+    await page.locator("#first .journal-dialog-cancel").click();
+    await page.locator("#first .journal-editor-dialog").waitFor({ state: "detached" });
+  };
+  const saveDialog = async (selector) => {
+    await page.locator(`#first ${selector}`).first().click();
+    await page.locator("#first .journal-editor-dialog").waitFor();
+    await page.locator("#first .journal-editor-dialog button[type=submit]").click();
+    await page.locator("#first .journal-editor-dialog").waitFor({ state: "detached" });
+  };
+  await saveDialog(".journal-stay-create");
+  await saveDialog(".journal-stay-edit");
+  await cancelDialog(".journal-stay-edit");
   await page.locator("#first .journal-stay-delete").click();
-  await page.locator("#first .journal-expense-edit").click();
+  await saveDialog(".journal-expense-edit");
+  await cancelDialog(".journal-expense-edit");
   await page.locator("#first .journal-expense-delete").click();
-  await page.locator("#first .journal-rating-edit").click();
-  await page.locator("#first .journal-overnight-edit").click();
-  await page.locator("#first .journal-interruption-assign").click();
+  await saveDialog(".journal-expense-create");
+  await saveDialog(".journal-rating-edit");
+  await cancelDialog(".journal-rating-edit");
+  await saveDialog(".journal-overnight-edit");
+  await cancelDialog(".journal-overnight-edit");
+  await saveDialog(".journal-interruption-assign");
+  await cancelDialog(".journal-interruption-assign");
+  await page.evaluate(() => { window.journalFail = true; });
+  await page.locator("#first .journal-expense-create").click();
+  await page.locator("#first .journal-editor-dialog").waitFor();
+  await page.locator("#first .journal-editor-dialog button[type=submit]").click();
+  await page.locator("#first .journal-dialog-error").waitFor();
+  assert.match(await page.locator("#first .journal-dialog-error").innerText(), /Speichern fehlgeschlagen/);
+  await page.locator("#first .journal-dialog-cancel").click();
+  await page.evaluate(() => { window.journalFail = false; });
   const journalActions = await page.evaluate(() => window.journalWsCalls.map((message) => message.type));
   for (const action of ["create_stay", "update_stay", "delete_stay", "update_expense", "delete_expense", "upsert_rating", "upsert_overnight", "assign_interruption"]) {
     assert.ok(journalActions.some((type) => type.endsWith(action)), `missing ${action}`);
   }
   await page.locator("#first .journal-create").click();
-  assert.deepEqual(calls.at(-1), ["smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: "womo", title: "Neue Reise" }]);
+  await page.locator("#first .journal-editor-dialog input[name=title]").fill("Neue Reise");
+  await page.locator("#first .journal-editor-dialog button[type=submit]").click();
+  assert.ok((await page.evaluate(() => window.journalWsCalls)).some((message) => message.type.endsWith("create_trip")));
   const journalPdf = await Promise.all([
     page.waitForEvent("download"),
     page.locator("#first .journal-pdf").click(),

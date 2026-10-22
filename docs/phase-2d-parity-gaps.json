@@ -4,8 +4,8 @@
     "version": "v0.3.2",
     "commit": "11a98f966110d2e70aeb5181b66bc4d97c373623"
   },
-  "suite_commit_reviewed": "ffbf2a5afabe4a9cf78c3fc9d1f85cf00c7e6aac",
-  "status": "open_gaps_are_concrete",
+  "suite_commit_reviewed": "f284eb4dac00659dc4bb68b432b82845dfdb06c4",
+  "status": "phase_2d_open_gaps_closed_locally",
   "gaps": [
     {
       "id": "ws-vehicle-scope-update-trip",
@@ -68,8 +68,9 @@
       "user_impact": "Several Stable journal workflows are not reachable from the central Suite card.",
       "test": "frontend/tests/browser/card.spec.mjs::journal workflow assertions",
       "priority": "high",
-      "status": "open",
-      "result": "Browser regression covers the new action controls, but full user-editable Stable workflows remain incomplete."
+      "status": "closed",
+      "closed_by": "stable-field-dialogs-with-prefill-validation-refresh",
+      "result": "Chromium regression passed dialog open/save/cancel/error paths for trip, stay, expense, rating, overnight and interruption workflows; destructive delete controls remain covered by the existing browser path."
     },
     {
       "id": "ha-full-lifecycle",
@@ -80,10 +81,9 @@
       "user_impact": "Those lifecycle guarantees remain unproven before a production-like test.",
       "test": "tests/test_real_coexistence.py::test_real_four_integration_coexistence",
       "priority": "blocker",
-      "status": "open",
-      "execution": "partial_pass",
-      "blocked_step": "full ConfigEntry setup/reload/unload/restart path",
-      "blocker_evidence": "The real lifecycle extension reaches HA setup but the fixture teardown hangs in asyncio/AIOHTTP pycares shutdown threads; bounded run times out after 20s. The existing component-level coexistence path remains reproducibly passing."
+      "status": "closed",
+      "execution": "pass",
+      "result": "Bounded real harness passed stable component setup, Suite setup, registry/database initialization, Suite unload, Suite re-setup, second unload, stable-survival assertion, block-till-done, and complete HA stop."
     }
   ],
   "closed_checks": [

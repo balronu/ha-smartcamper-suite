@@ -26,6 +26,57 @@ class SmartCamperCard extends HTMLElement {
   private journalDetailsVehicle?: string;
   private journalDetailsLoading = false;
 
+  private journalError(message: unknown): string {
+    return message instanceof Error ? message.message : String(message ?? "Unbekannter Fehler");
+  }
+
+  private openJournalDialog(kind: string, vehicleId: string, tripId: string | undefined, item?: Record<string, any>): void {
+    if (!this._hass?.callWS) return;
+    const value = (key: string, fallback = ""): string => String(item?.[key] ?? fallback);
+    const edit = kind === "trip-create" ? false : Boolean(item?.id || item?.place_id || item?.interruption_id);
+    const title = kind === "stay" ? (edit ? "Aufenthalt bearbeiten" : "Aufenthalt hinzufügen") : kind === "expense" ? (edit ? "Kosten bearbeiten" : "Kosten erfassen") : kind === "rating" ? "Bewertung bearbeiten" : kind === "overnight" ? "Übernachtung bearbeiten" : kind === "interruption" ? "Unterbrechung zuordnen" : edit ? "Reise bearbeiten" : "Reise hinzufügen";
+    const fields = kind === "stay" ? `<label>Name <input name="name" required value="${value("name", "Aufenthalt")}"></label><label>Beginn <input name="started_at" type="datetime-local" value="${value("started_at")}"></label><label>Ende <input name="ended_at" type="datetime-local" value="${value("ended_at")}"></label><label>Adresse <input name="address" value="${value("address")}"></label>`
+      : kind === "expense" ? `<label>Kategorie <select name="category"><option value="fuel">Kraftstoff</option><option value="camping">Camping</option><option value="food">Essen</option><option value="maintenance">Wartung</option><option value="other">Sonstiges</option></select></label><label>Betrag <input name="amount" type="number" min="0" step="0.01" required value="${(Number(item?.amount_minor ?? 0) / 100).toFixed(2)}"></label><label>Währung <input name="currency" maxlength="3" value="${value("currency", "EUR")}"></label><label>Datum <input name="occurred_on" type="date" value="${value("occurred_on")}"></label><label>Notiz <textarea name="note">${value("note")}</textarea></label>`
+      : kind === "rating" ? `<label>Gesamt <input name="overall" type="number" min="1" max="5" required value="${value("overall")}"></label><label>Wohnmobil-Zugang <input name="large_rv_access" type="number" min="1" max="5" value="${value("large_rv_access")}"></label><label>Rangieren <input name="space_maneuvering" type="number" min="1" max="5" value="${value("space_maneuvering")}"></label><label>Ausstattung <input name="facilities" type="number" min="1" max="5" value="${value("facilities")}"></label><label>Umgebung <input name="surroundings" type="number" min="1" max="5" value="${value("surroundings")}"></label><label>Kommentar <textarea name="review_text">${value("review_text")}</textarea></label>`
+      : kind === "overnight" ? `<label>Art <select name="place_kind"><option value="campsite">Campingplatz</option><option value="rv_site">Stellplatz</option><option value="wild_camp">Freistehen</option><option value="other">Sonstiges</option></select></label><label>Website <input name="website_url" type="url" value="${value("website_url")}"></label><label>Buchungsnotiz <textarea name="booking_note">${value("booking_note")}</textarea></label><label><input name="large_rv_suitable" type="checkbox" ${item?.large_rv_suitable ? "checked" : ""}> Für großes Wohnmobil geeignet</label>`
+      : kind === "interruption" ? `<label>Status <select name="status"><option value="assigned">Zugeordnet</option><option value="dismissed">Verworfen</option><option value="pending">Offen</option></select></label><label>Stopp-ID (optional) <input name="stop_id" value="${value("stop_id")}"></label>`
+      : `<label>Titel <input name="title" required value="${value("title")}"></label><label>Ziel <input name="destination" value="${value("destination")}"></label><label>Startdatum <input name="start_date" type="date" value="${value("start_date")}"></label><label>Enddatum <input name="end_date" type="date" value="${value("end_date")}"></label>`;
+    const dialog = document.createElement("dialog");
+    dialog.className = "journal-editor-dialog";
+    dialog.innerHTML = `<form method="dialog"><h3>${title}</h3><div class="journal-dialog-fields">${fields}</div><p class="journal-dialog-error" role="alert" hidden></p><div class="journal-dialog-actions"><button type="button" class="journal-dialog-cancel">Abbrechen</button><button type="submit">Speichern</button></div></form>`;
+    this.append(dialog);
+    const select = dialog.querySelector<HTMLSelectElement>("select[name=category],select[name=place_kind],select[name=status]");
+    if (select) select.value = value(select.name, select.value);
+    dialog.querySelector(".journal-dialog-cancel")?.addEventListener("click", () => dialog.close());
+    dialog.querySelector("form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget as HTMLFormElement;
+      if (!form.reportValidity()) return;
+      const data = new FormData(form);
+      const payload: Record<string, any> = { vehicle_id: vehicleId, entry_id: "default" };
+      const text = (name: string): string | undefined => { const raw = String(data.get(name) ?? "").trim(); return raw || undefined; };
+      try {
+        if (kind === "stay") await this._hass!.callWS!({ type: `smartcamper_suite/journal/${edit ? "update_stay" : "create_stay"}`, ...payload, ...(edit ? { stay_id: item!.id } : { trip_id: tripId }), name: text("name"), started_at: text("started_at"), ended_at: text("ended_at"), address: text("address") });
+        else if (kind === "expense") await this._hass!.callWS!({ type: `smartcamper_suite/journal/${edit ? "update_expense" : "create_expense"}`, ...payload, ...(edit ? { expense_id: item!.id } : { trip_id: tripId }), category: text("category") ?? "other", amount_minor: Math.round(Number(data.get("amount") ?? 0) * 100), currency: (text("currency") ?? "EUR").toUpperCase(), occurred_on: text("occurred_on"), note: text("note") });
+        else if (kind === "rating") await this._hass!.callWS!({ type: "smartcamper_suite/journal/upsert_rating", ...payload, place_id: item!.place_id, overall: Number(data.get("overall")), large_rv_access: Number(data.get("large_rv_access")) || undefined, space_maneuvering: Number(data.get("space_maneuvering")) || undefined, facilities: Number(data.get("facilities")) || undefined, surroundings: Number(data.get("surroundings")) || undefined, review_text: text("review_text") ?? "" });
+        else if (kind === "overnight") await this._hass!.callWS!({ type: "smartcamper_suite/journal/upsert_overnight", ...payload, place_id: item!.place_id, place_kind: text("place_kind") ?? "other", website_url: text("website_url"), booking_note: text("booking_note"), large_rv_suitable: data.get("large_rv_suitable") === "on" });
+        else if (kind === "interruption") await this._hass!.callWS!({ type: "smartcamper_suite/journal/assign_interruption", ...payload, trip_id: tripId, interruption_id: item!.interruption_id, status: text("status") ?? "assigned", stop_id: text("stop_id") });
+        else if (kind === "trip-create") await this._hass!.callWS!({ type: "smartcamper_suite/journal/create_trip", ...payload, title: text("title") ?? "Neue Reise", destination: text("destination"), start_date: text("start_date"), end_date: text("end_date") });
+        else await this._hass!.callWS!({ type: "smartcamper_suite/journal/update_trip", ...payload, trip_id: item!.id, title: text("title"), destination: text("destination"), start_date: text("start_date"), end_date: text("end_date") });
+        dialog.close();
+        dialog.remove();
+        this.journalDetails = undefined;
+        this.journalDetailsVehicle = undefined;
+        this.render();
+      } catch (error) {
+        const errorNode = dialog.querySelector<HTMLElement>(".journal-dialog-error");
+        if (errorNode) { errorNode.hidden = false; errorNode.textContent = `Speichern fehlgeschlagen: ${this.journalError(error)}`; }
+      }
+    });
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", "");
+  }
+
   setConfig(raw: CardConfig): void {
     this.config = validateConfig(raw);
     this.render();
@@ -103,14 +154,15 @@ class SmartCamperCard extends HTMLElement {
       const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId && state.attributes?.database === "smartcamper_suite_travel_journal.sqlite");
       const journal = sensor?.attributes as JournalView | undefined;
       const view = journal && this.journalDetailsVehicle === vehicleId ? { ...journal, ...this.journalDetails } : journal;
-      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions,.journal-record-actions,.journal-drive-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.journal-drives,.journal-suggestions{margin-top:12px}.journal-drives ul,.journal-suggestions ul{padding-left:18px}.journal-drive-form input{min-width:95px}.journal-create,.journal-pdf,.journal-gpx-label,.journal-drive-form button,.journal-record-actions button,.journal-drives button,.journal-suggestions button{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}.journal-gpx{display:none}</style>${renderJournalHtml(view, this.config)}`;
+      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions,.journal-record-actions,.journal-drive-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.journal-drives,.journal-suggestions{margin-top:12px}.journal-drives ul,.journal-suggestions ul{padding-left:18px}.journal-drive-form input{min-width:95px}.journal-create,.journal-pdf,.journal-gpx-label,.journal-drive-form button,.journal-record-actions button,.journal-drives button,.journal-suggestions button,.journal-trip-actions button{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}.journal-gpx{display:none}.journal-editor-dialog{border:0;border-radius:12px;max-width:min(520px,calc(100vw - 24px));width:100%;background:var(--card-background-color,#fff);color:var(--primary-text-color,#263238)}.journal-editor-dialog::backdrop{background:rgba(0,0,0,.45)}.journal-dialog-fields{display:grid;gap:10px}.journal-dialog-fields label{display:grid;gap:4px}.journal-dialog-fields input,.journal-dialog-fields select,.journal-dialog-fields textarea{box-sizing:border-box;width:100%;padding:7px;border:1px solid var(--divider-color,#aaa);border-radius:6px;background:var(--card-background-color,#fff);color:inherit}.journal-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.journal-dialog-error{color:var(--error-color,#d32f2f)}</style>${renderJournalHtml(view, this.config)}`;
       void this.loadJournalDetails(vehicleId);
       this.querySelector(".journal-create")?.addEventListener("click", () => {
-        if (vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: vehicleId, title: "Neue Reise" });
+        if (vehicleId) this.openJournalDialog("trip-create", vehicleId, tripId);
       });
       const tripId = journal?.active_trip?.id;
       this.querySelector(".journal-edit")?.addEventListener("click", () => {
-        if (tripId && vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", vehicle_id: vehicleId, trip_id: tripId, destination: "Bearbeitet" });
+        const trip = view?.active_trip;
+        if (vehicleId && tripId && trip) this.openJournalDialog("trip", vehicleId, tripId, trip);
       });
       this.querySelector(".journal-complete")?.addEventListener("click", () => {
         if (tripId && vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", vehicle_id: vehicleId, trip_id: tripId, status: "completed" });
@@ -170,16 +222,17 @@ class SmartCamperCard extends HTMLElement {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_stop", vehicle_id: vehicleId, trip_id: tripId, name: "Neuer Stopp", occurred_at: new Date().toISOString() });
       });
       this.querySelector(".journal-stay-create")?.addEventListener("click", () => {
-        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_stay", vehicle_id: vehicleId, trip_id: tripId, name: "Neuer Aufenthalt" });
+        if (vehicleId) this.openJournalDialog("stay", vehicleId, tripId);
       });
       this.querySelectorAll<HTMLButtonElement>(".journal-stay-edit").forEach((button) => button.addEventListener("click", () => {
-        if (vehicleId && button.dataset.stayId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/update_stay", vehicle_id: vehicleId, stay_id: button.dataset.stayId, name: "Bearbeiteter Aufenthalt" });
+        const item = (view?.stays ?? []).find((stay) => stay.id === button.dataset.stayId);
+        if (vehicleId && item) this.openJournalDialog("stay", vehicleId, tripId, item);
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-stay-delete").forEach((button) => button.addEventListener("click", () => {
         if (vehicleId && button.dataset.stayId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_stay", vehicle_id: vehicleId, stay_id: button.dataset.stayId });
       }));
       this.querySelector(".journal-expense-create")?.addEventListener("click", () => {
-        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_expense", vehicle_id: vehicleId, trip_id: tripId, category: "other", amount_minor: 0, currency: "EUR" });
+        if (vehicleId) this.openJournalDialog("expense", vehicleId, tripId);
       });
       this.querySelector(".journal-diagnostics")?.addEventListener("click", () => {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/diagnostics", vehicle_id: vehicleId });
@@ -191,16 +244,20 @@ class SmartCamperCard extends HTMLElement {
         if (vehicleId && button.dataset.expenseId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_expense", vehicle_id: vehicleId, expense_id: button.dataset.expenseId });
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-expense-edit").forEach((button) => button.addEventListener("click", () => {
-        if (vehicleId && button.dataset.expenseId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/update_expense", vehicle_id: vehicleId, expense_id: button.dataset.expenseId, note: "Bearbeitet" });
+        const item = (view?.expenses ?? []).find((expense) => expense.id === button.dataset.expenseId);
+        if (vehicleId && item) this.openJournalDialog("expense", vehicleId, tripId, item);
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-rating-edit").forEach((button) => button.addEventListener("click", () => {
-        if (vehicleId && button.dataset.placeId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/upsert_rating", vehicle_id: vehicleId, place_id: button.dataset.placeId, overall: 5 });
+        const item = (view?.ratings ?? []).find((rating) => rating.place_id === button.dataset.placeId) ?? { place_id: button.dataset.placeId };
+        if (vehicleId && item.place_id) this.openJournalDialog("rating", vehicleId, tripId, item);
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-overnight-edit").forEach((button) => button.addEventListener("click", () => {
-        if (vehicleId && button.dataset.placeId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/upsert_overnight", vehicle_id: vehicleId, place_id: button.dataset.placeId, place_kind: "campsite" });
+        const item = (view?.overnights ?? []).find((overnight) => overnight.place_id === button.dataset.placeId) ?? { place_id: button.dataset.placeId };
+        if (vehicleId && item.place_id) this.openJournalDialog("overnight", vehicleId, tripId, item);
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-interruption-assign").forEach((button) => button.addEventListener("click", () => {
-        if (vehicleId && tripId && button.dataset.interruptionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/assign_interruption", vehicle_id: vehicleId, trip_id: tripId, interruption_id: button.dataset.interruptionId, status: "assigned" });
+        const item = (view?.interruptions ?? []).find((interruption) => interruption.interruption_id === button.dataset.interruptionId);
+        if (vehicleId && tripId && item) this.openJournalDialog("interruption", vehicleId, tripId, item);
       }));
       return;
     }

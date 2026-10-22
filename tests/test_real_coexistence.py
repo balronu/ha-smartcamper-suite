@@ -54,12 +54,31 @@ def test_real_four_integration_coexistence():
                     integration = await loader.async_get_integration(hass, domain)
                     component = await integration.async_get_component()
                     results[domain] = await component.async_setup(hass, {})
-                from custom_components.smartcamper_suite import async_setup_entry
+                from custom_components.smartcamper_suite import async_setup_entry, async_unload_entry
                 entry = ConfigEntry(data={}, domain="smartcamper_suite", title="SmartCamper Suite", source="user", version=1, minor_version=0, options={"modules": {"travel_journal": True}}, entry_id="coexistence-suite", unique_id=None, discovery_keys=MappingProxyType({}), subentries_data=None)
                 results["smartcamper_suite"] = await async_setup_entry(hass, entry)
                 assert results == {domain: True for domain in sources}
                 assert (root / ".storage" / "smartcamper_suite_travel_journal.sqlite").is_file()
+                assert hass.data["smartcamper_suite"][entry.entry_id].journal.enabled
+
+                # Exercise the complete candidate lifecycle.  Explicitly stop
+                # the fixture-owned HA instance below; leaving that to the
+                # pytest plugin leaks HA's ImportExecutor into teardown.
+                assert await async_unload_entry(hass, entry)
+                assert entry.entry_id not in hass.data["smartcamper_suite"]
+                assert results["camper_travel_journal"] is True
+
+                results["smartcamper_suite_reload"] = await async_setup_entry(hass, entry)
+                assert results["smartcamper_suite_reload"] is True
+                assert hass.data["smartcamper_suite"][entry.entry_id].journal.enabled
+                assert await async_unload_entry(hass, entry)
+                assert entry.entry_id not in hass.data["smartcamper_suite"]
+                await hass.async_block_till_done()
+                await hass.async_stop()
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
     asyncio.run(run())
+    # asyncio.run() closes its loop; the HA pytest plugin expects a fresh
+    # current loop when it prepares the next test after this explicit HA stop.
+    asyncio.set_event_loop(asyncio.new_event_loop())

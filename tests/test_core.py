@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import sqlite3
 
 import pytest
@@ -11,7 +12,7 @@ from custom_components.smartcamper_suite.fuel_stations import (
     FuelStationsRuntime,
     ProviderResponse,
 )
-from custom_components.smartcamper_suite.migration import preview_legacy_entry
+from custom_components.smartcamper_suite.migration import import_legacy_entry, preview_legacy_entry
 from custom_components.smartcamper_suite.models import ValidationError, Vehicle
 from custom_components.smartcamper_suite.modules import ModuleManager, ModuleRuntime
 from custom_components.smartcamper_suite.providers import ProviderRegistry
@@ -178,3 +179,23 @@ def test_legacy_preview_is_reversible_and_does_not_copy_secret():
     assert preview.credential_fields == ("api_key",)
     assert "synthetic-secret" not in str(preview.as_dict())
     assert data["api_key"] == "synthetic-secret"
+
+
+def test_legacy_import_is_opt_in_idempotent_and_rollback_safe():
+    data = {
+        "title": "Legacy Camper", "provider_mode": "tankerkoenig",
+        "api_key": "synthetic-secret", "location_entity": "device_tracker.womo",
+    }
+    target = {}
+    with pytest.raises(PermissionError):
+        import_legacy_entry("legacy-1", data, target)
+    result = import_legacy_entry("legacy-1", data, target, opt_in=True)
+    assert result.imported is True
+    assert len(target["vehicles"]) == 1
+    assert "synthetic-secret" not in str(target)
+    before_rollback = copy.deepcopy(target)
+    result.transaction.rollback()
+    assert target == {}
+    target.update(before_rollback)
+    repeated = import_legacy_entry("legacy-1", data, target, opt_in=True)
+    assert repeated.already_imported is True

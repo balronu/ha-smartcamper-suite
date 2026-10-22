@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from math import isfinite
 from typing import Protocol
 
@@ -322,6 +323,7 @@ class FuelStationsRuntime:
         self.registry = registry
         self.credential_getter = credential_getter
         self.results: dict[tuple[str, str], list[FuelStation]] = {}
+        self.status: dict[str, dict[str, object]] = {}
         self._cache: dict[tuple[str, str, str, float, float, float, int], list[FuelStation]] = {}
         self._inflight: dict[tuple[str, str, str, float, float, float, int], asyncio.Task[list[FuelStation]]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -330,6 +332,7 @@ class FuelStationsRuntime:
         vehicle = self.vehicles.get(vehicle_id)
         if vehicle is None or vehicle.archived:
             raise FuelConfigurationError("vehicle is missing or archived")
+        self.status[vehicle_id] = {"state": "loading", "error": None}
         fuels = vehicle.fuel_types or ["diesel"]
         combined: list[FuelStation] = []
         for fuel in fuels:
@@ -340,6 +343,14 @@ class FuelStationsRuntime:
                 account = self.accounts.get(provider)
                 if not account or not account.get("credential_id"):
                     continue
+                country = vehicle.extra.get("country_code")
+                explicit_provider = vehicle.fuel_provider_modes not in ([], [PROVIDER_AUTO])
+                allowed_markets = account.get("markets_allowed") or account.get("markets_granted") or account.get("markets_approved")
+                if provider == "nakordoni" and not explicit_provider:
+                    if not isinstance(allowed_markets, (list, tuple, set)) or not allowed_markets:
+                        continue
+                    if isinstance(country, str) and country.upper() not in {str(item).upper() for item in allowed_markets}:
+                        continue
                 credential = self.credential_getter(account["credential_id"])
                 if not credential:
                     continue
@@ -361,7 +372,21 @@ class FuelStationsRuntime:
                 finally:
                     self._inflight.pop(key, None)
         self.results[(vehicle_id, "all")] = combined
-        return sorted(combined, key=lambda station: (station.price is None, station.price or float("inf"), station.distance_km or float("inf")))[: vehicle.fuel_station_count]
+        sorted_stations = sorted(
+            combined,
+            key=lambda station: (
+                station.distance_km is None,
+                station.distance_km or float("inf"),
+                station.price is None,
+                station.price or float("inf"),
+            ),
+        )
+        self.status[vehicle_id] = {
+            "state": "ready" if sorted_stations else "empty",
+            "error": None,
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        return sorted_stations[: vehicle.fuel_station_count]
 
     async def _fetch(self, credential_id: str, provider: str, query: FuelSearchQuery, credential: str, key: tuple) -> list[FuelStation]:
         lock = self._locks.setdefault(credential_id, asyncio.Lock())

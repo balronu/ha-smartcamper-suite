@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +32,33 @@ class LegacyFuelPreview:
         }
 
 
+@dataclass(slots=True)
+class MigrationTransaction:
+    """Rollback boundary for one synthetic or later user-approved import."""
+
+    target: dict[str, Any]
+    before: dict[str, Any]
+    committed: bool = False
+
+    def commit(self) -> None:
+        self.committed = True
+
+    def rollback(self) -> None:
+        self.target.clear()
+        self.target.update(copy.deepcopy(self.before))
+        self.committed = False
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationResult:
+    imported: bool
+    already_imported: bool
+    vehicle_id: str
+    credential_refs: tuple[str, ...]
+    cards_preview: tuple[dict[str, Any], ...]
+    transaction: MigrationTransaction
+
+
 def preview_legacy_entry(entry_id: str, data: dict[str, Any], options: dict[str, Any] | None = None) -> LegacyFuelPreview:
     """Inspect legacy data without copying secrets or changing the entry."""
     options = options or {}
@@ -55,6 +84,56 @@ def preview_legacy_entry(entry_id: str, data: dict[str, Any], options: dict[str,
     )
 
 
+def import_legacy_entry(
+    entry_id: str,
+    data: dict[str, Any],
+    target: dict[str, Any],
+    *,
+    opt_in: bool = False,
+    options: dict[str, Any] | None = None,
+    card_configs: list[dict[str, Any]] | None = None,
+) -> MigrationResult:
+    """Opt-in, idempotent config import; never deletes the legacy source/cards."""
+    if not opt_in:
+        raise PermissionError("legacy import requires explicit opt-in")
+    preview = preview_legacy_entry(entry_id, data, options)
+    if preview.conflicts:
+        raise ValueError("legacy data has unresolved conflicts")
+    before = copy.deepcopy(target)
+    candidate = copy.deepcopy(target)
+    vehicle_id = uuid5(NAMESPACE_URL, f"smartcamper-suite:legacy:{entry_id}").hex
+    vehicles = candidate.setdefault("vehicles", [])
+    if not isinstance(vehicles, list):
+        raise TypeError("target vehicles must be a list")
+    existing = next((item for item in vehicles if isinstance(item, dict) and item.get("vehicle_id") == vehicle_id), None)
+    if existing is not None:
+        transaction = MigrationTransaction(target, before, committed=True)
+        return MigrationResult(False, True, vehicle_id, tuple(preview.credential_fields), tuple(card_configs or ()), transaction)
+    vehicle = {
+        "vehicle_id": vehicle_id,
+        "name": str(data.get("title") or data.get("name") or f"Legacy {entry_id}"),
+        "tracker_entity_id": preview.tracker_entity_id,
+        "fuel_types": list(preview.fuel_types),
+        "fuel_radius_km": preview.radius_km or 20.0,
+        "fuel_station_count": preview.station_count or 5,
+        "fuel_provider_modes": list(preview.provider_modes),
+        "fuel_display_options": dict(data.get("display_options", {})) if isinstance(data.get("display_options"), dict) else {},
+        "extra": {"legacy_entry_id": entry_id},
+        "archived": False,
+    }
+    vehicles.append(vehicle)
+    accounts = candidate.setdefault("provider_accounts", {})
+    if not isinstance(accounts, dict):
+        raise TypeError("target provider_accounts must be a mapping")
+    for provider in preview.provider_modes:
+        if provider != "auto":
+            accounts.setdefault(provider, {"credential_id": f"legacy:{entry_id}:{provider}"})
+    target.clear()
+    target.update(candidate)
+    transaction = MigrationTransaction(target, before)
+    return MigrationResult(True, False, vehicle_id, tuple(preview.credential_fields), tuple(card_configs or ()), transaction)
+
+
 def _number(value: object) -> float | None:
     try:
         return float(value)
@@ -67,4 +146,3 @@ def _integer(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-

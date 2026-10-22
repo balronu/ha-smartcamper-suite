@@ -22,3 +22,5 @@ The QA report and current merge gates are documented in
 [docs/phase-2a-qa.md](docs/phase-2a-qa.md).
 The Phase 2B implementation plan and deviations are documented in
 [docs/phase-2b-mobile-fuel-stations-plan.md](docs/phase-2b-mobile-fuel-stations-plan.md).
+The detailed v0.8.4 comparison is documented in
+[docs/phase-2b-feature-matrix.md](docs/phase-2b-feature-matrix.md).

@@ -1,6 +1,6 @@
 import {
   type CardConfig,
-  renderFuelStationsHtml,
+  renderFuelStateHtml,
   selectVehicle,
   validateConfig,
 } from "./config";
@@ -35,12 +35,21 @@ class SmartCamperCard extends HTMLElement {
         <option value="route_planner">Camper Route Planner</option>
         <option value="border_forecast">Wartezeiten Forecast</option>
       </select></label>
-      <label>Fahrzeug <input data-field="vehicle_id" placeholder="Fahrzeug-ID (optional)" /></label>`;
+      <label>Fahrzeug <input data-field="vehicle_id" placeholder="Fahrzeug-ID (optional)" /></label>
+      <label>Sortierung <select data-field="sort_mode"><option value="distance">Entfernung</option><option value="price">Preis</option></select></label>
+      <label>Anzahl <input data-field="visible_station_count" type="number" min="0" /></label>
+      <label><input data-field="show_prices" type="checkbox" checked /> Preise</label>
+      <label><input data-field="show_distance" type="checkbox" checked /> Entfernung</label>
+      <label><input data-field="show_address" type="checkbox" checked /> Adresse</label>
+      <label><input data-field="show_status" type="checkbox" checked /> Status</label>`;
     const emit = (): void => {
       const module = (editor.querySelector("[data-field=module]") as HTMLSelectElement).value;
       const vehicle_id = (editor.querySelector("[data-field=vehicle_id]") as HTMLInputElement).value || undefined;
+      const sort_mode = (editor.querySelector("[data-field=sort_mode]") as HTMLSelectElement).value as "distance" | "price";
+      const visible_station_count = Number((editor.querySelector("[data-field=visible_station_count]") as HTMLInputElement).value) || 0;
+      const bool = (field: string): boolean => (editor.querySelector(`[data-field=${field}]`) as HTMLInputElement).checked;
       editor.dispatchEvent(new CustomEvent("config-changed", {
-        bubbles: true, composed: true, detail: { config: { ...this.config, module, vehicle_id } },
+        bubbles: true, composed: true, detail: { config: { ...this.config, module, vehicle_id, sort_mode, visible_station_count, show_prices: bool("show_prices"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status") } },
       }));
     };
     editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", emit));
@@ -64,8 +73,10 @@ class SmartCamperCard extends HTMLElement {
     const states = this._hass?.states ?? {};
     const vehicleId = selectVehicle(this.config, states);
     const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId);
-    const stations = (sensor?.attributes?.stations ?? []) as Parameters<typeof renderFuelStationsHtml>[0];
-    this.innerHTML = `<article class="fuel-card"><header><strong>Tankstellen</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><ul>${renderFuelStationsHtml(stations, this.config)}</ul></article>`;
+    const status = sensor?.attributes?.state;
+    const stations = (sensor?.attributes?.stations ?? []) as Parameters<typeof renderFuelStateHtml>[1];
+    const stationHtml = renderFuelStateHtml(status as string | undefined, stations, this.config);
+    this.innerHTML = `<article class="fuel-card"><header><strong>Tankstellen</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><div>${stationHtml}</div></article>`;
   }
 }
 

@@ -14,10 +14,12 @@ except ImportError:  # Allows domain-layer tests without Home Assistant installe
 
 from .api import ApiClient
 from .auth import CredentialStore
-from .const import DOMAIN
+from .const import CONF_NAKORDONI_AUTH_METHOD, DOMAIN
 from .frontend import async_register_frontend, async_unregister_frontend
 from .fuel_stations import FuelProviderRegistry, FuelStationsRuntime, ProviderResponse
+from .models import Vehicle
 from .modules import ModuleManager
+from .oauth2 import async_register as async_register_oauth
 from .providers import ProviderRegistry
 from .storage import SuiteStore
 
@@ -48,12 +50,28 @@ class SuiteRuntime:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_register_frontend(hass)
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if not domain_data.get("oauth_registered"):
+        async_register_oauth(hass)
+        domain_data["oauth_registered"] = True
     store = await hass.async_add_executor_job(
         SuiteStore, hass.config.path(".storage", "smartcamper_suite.sqlite")
     )
     providers = ProviderRegistry()
     credentials = CredentialStore()
     credentials.load_api_keys(entry.data.get("credentials"))
+    oauth_session = None
+    if isinstance(entry.data.get("token"), dict) and entry.data.get("auth_implementation") == "nakordoni" and entry.data.get(CONF_NAKORDONI_AUTH_METHOD) == "oauth2":
+        from homeassistant.helpers.config_entry_oauth2_flow import (
+            OAuth2Session,
+            async_get_config_entry_implementation,
+        )
+
+        implementation = await async_get_config_entry_implementation(hass, entry)
+        oauth_session = OAuth2Session(hass, entry, implementation)
+        token = entry.data["token"].get("access_token")
+        if isinstance(token, str) and token:
+            credentials.put_oauth("nakordoni-oauth", "nakordoni", token, set())
 
     async def transport(provider: str, url: str, params: dict[str, str], headers: dict[str, str]) -> ProviderResponse:
         """Perform one provider request through HA's shared aiohttp session."""
@@ -61,20 +79,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         session = async_get_clientsession(hass)
         request_headers = dict(headers)
+        if provider == "nakordoni" and oauth_session is not None:
+            response = await oauth_session.async_request("GET", url, params=params, timeout=15)
+            try:
+                return ProviderResponse(response.status, await response.json(content_type=None), dict(response.headers))
+            finally:
+                response.release()
         async with session.get(url, params=params, headers=request_headers, timeout=15) as response:
             return ProviderResponse(response.status, await response.json(content_type=None), dict(response.headers))
 
     vehicles = {}
     for raw_vehicle in entry.options.get("vehicles", []):
         try:
-            from .models import Vehicle
             vehicle = Vehicle.from_dict(raw_vehicle)
         except (TypeError, ValueError, KeyError):
             continue
         vehicles[vehicle.vehicle_id] = vehicle
+    provider_accounts = dict(entry.options.get("provider_accounts", {}))
+    if oauth_session is not None:
+        token_data = entry.data["token"]
+        provider_accounts.setdefault("nakordoni", {
+            "credential_id": "nakordoni-oauth",
+            **{
+                key: token_data[key]
+                for key in ("markets_approved", "markets_granted", "markets_available", "markets_allowed")
+                if isinstance(token_data.get(key), (list, tuple, set))
+            },
+        })
     fuel = FuelStationsRuntime(
         vehicles,
-        entry.options.get("provider_accounts", {}),
+        provider_accounts,
         FuelProviderRegistry(providers, transport),
         credentials.get_secret,
     )

@@ -31,7 +31,8 @@ Der Stable-Stand \`v0.8.4\` enthält:
   Diagnostik.
 - Config-/Options-Flow, Legacy-Entry-Migration, Sensoren sowie Services für
   manuellen Refresh und Fetch-Modus.
-- Nakordoni OAuth2-PKCE mit Home-Assistant-OAuth-Helfern.
+- Nakordoni OAuth2-PKCE mit Home-Assistant-OAuth-Helfern; die HA-Session stellt
+  Tokenpersistenz und Single-Flight-Refresh über einen Lock bereit.
 - Lovelace-Modi **Detailed**, **Compact** und **Individual**, konfigurierbare
   Felder, Dichte, Trennlinien, Sortierung und **Highlights + Liste**.
 
@@ -78,11 +79,13 @@ Credential-Speicher und nicht belegte providerbezogene Annahmen.
    Provider-Konto.
 2. Ersetzen, Entfernen, Deaktivieren und fehlende Berechtigungen als atomare,
    secret-freie Statusübergänge testen.
-3. Nakordoni OAuth2-PKCE vollständig implementieren und testen:
+3. Nakordoni OAuth2-PKCE über die exakten Stable-Endpunkte implementieren und testen:
    Ablauf mit Sicherheitsabstand, persistente Wiederherstellung ohne Logging,
    \`asyncio.Lock\`/Single-Flight je Credential, parallele Requests mit genau
    einer Erneuerung, ungültiger Refresh-Token, 401, 403, Rate-Limit und Netzwerk.
-4. Bis diese Tests grün sind, OAuth nicht als produktionsfähig freischalten.
+4. Die synthetischen PKCE-/Refresh-Verträge sind grün; eine echte Provider-E2E-
+   Autorisierung bleibt ohne Credentials bewusst ungetestet und ist keine
+   Aussage über eine erfolgreiche Produktionsfreischaltung.
 
 ### 2B-D – Fahrzeugbezogene Suche und Runtime
 
@@ -204,22 +207,22 @@ Auftraggebers gestartet; Review und Merge stehen noch aus.
 
 Die Implementierung wurde nach der ausdrücklichen Phase-2B-Freigabe begonnen.
 Die drei Provider-Adapter, fahrzeugbezogene Fuel-Einstellungen, Runtime,
-Sensoren, Credential-Services, OAuth-Single-Flight-Basis, Legacy-Dry-Run und
-die Kartenansicht sind nun als Kandidat implementiert. Die anderen Module
-bleiben Platzhalter.
+Sensoren, Credential-Services, Nakordoni-PKCE-Registrierung, transaktionaler
+Legacy-Import und die Kartenansicht sind nun als Kandidat implementiert. Die
+anderen Module bleiben Platzhalter.
 
 Bewusste Abweichungen vom Plan:
 
 - Die Provider-Transportgrenze ist ein synthetischer, injizierbarer Contract;
   die HA-Runtime bindet ihn an die gemeinsame HA-aiohttp-Session. Es gibt
   keinen separaten Client pro Fahrzeug.
-- OAuth wird zunächst über den zentralen CredentialStore und einen geprüften
-  Single-Flight-Refresh-Callback abstrahiert. Provider-spezifische OAuth-
-  Scopes, Autorisierungsdialog und Token-Endpoint-Integration müssen vor einer
-  produktiven Nakordoni-Nutzung noch separat gegen die aktuelle HA-OAuth-API
-  geprüft werden.
-- Die Legacy-Migration bleibt absichtlich Preview-only; sie schreibt weder
-  Config Entries noch Dashboards und löscht kein altes Entry.
-- Die v0.8.4-Kartenmodi sind in der Suite-Karte als Fuel-Ansicht zusammengeführt;
-  die vollständige historische Navigation und alle dekorativen Optionen sind
-  weiterhin ein Review-/Browser-Abnahmepunkt.
+- OAuth nutzt die exakten Stable-Endpunkte und HA-PKCE-/Session-Helfer. Eine
+  echte Autorisierung und ein providerseitiger Widerrufsfall bleiben ohne
+  Credentials ungetestet; keine Scopes oder Endpunkte wurden erfunden.
+- Die Legacy-Migration ist jetzt opt-in ausführbar, transaktional und rollback-
+  fähig; sie schreibt weiterhin keine produktiven Config Entries, verändert
+  keine Dashboards und löscht kein altes Entry.
+- Die Kartenansicht deckt Stationsfelder, Multi-Fuel-Preise, Sortierung,
+  Ergebnislimit, Status- und Ladefehler ab. Historische Highlights-, Logo-,
+  Diagnose- und Navigationsoptionen der v0.8.4 sind noch kein vollständiger
+  Kompatibilitätsnachweis.

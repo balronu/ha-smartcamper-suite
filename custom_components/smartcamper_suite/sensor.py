@@ -43,6 +43,7 @@ class FuelStationsSensor(SensorEntity):
         stations = self._runtime.fuel.results.get((self._vehicle_id, "all"), [])
         return {
             "vehicle_id": self._vehicle_id,
+            **self._runtime.fuel.status.get(self._vehicle_id, {"state": "idle"}),
             "stations": [
                 {
                     "station_id": station.station_id,
@@ -75,4 +76,3 @@ class FuelStationsSensor(SensorEntity):
             return
         await self._runtime.fuel.async_search(self._vehicle_id, latitude, longitude)
         self.async_write_ha_state()
-

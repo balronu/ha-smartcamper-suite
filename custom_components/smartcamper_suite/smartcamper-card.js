@@ -68,13 +68,16 @@ function renderFuelStateHtml(status, stations, config) {
   return renderFuelStationsHtml(stations, config);
 }
 function renderRouteHtml(route, config) {
+  if (route?.state === "error") return `<p class="route-error" role="alert">${escapeHtml(route.error ?? "Route konnte nicht berechnet werden.")}</p>`;
   if (!route || route.state !== "ready") return `<p class="route-empty" role="status">Keine berechnete Route vorhanden.</p>`;
   const distance = route.distance_m == null ? "\u2013" : `${(route.distance_m / 1e3).toFixed(1)} km`;
   const duration = route.duration_s == null ? "\u2013" : `${Math.round(route.duration_s / 60)} min`;
   const warnings = config.show_warnings === false ? "" : (route.warnings ?? []).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
   const points = route.geometry ?? [];
   const map = points.length > 1 ? `<svg class="route-map" viewBox="0 0 320 120" role="img" aria-label="Routenverlauf"><polyline points="${points.map((point, index) => `${index / (points.length - 1) * 300 + 10},${110 - index % 2 * 45}`).join(" ")}" fill="none" stroke="var(--primary-color,#03a9f4)" stroke-width="5" stroke-linecap="round" /></svg>` : "";
-  return `${map}<p class="route-summary"><strong>${distance}</strong> \xB7 ${duration} \xB7 ${escapeHtml(route.provider ?? "unbekannt")}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
+  const tolls = route.metadata?.tolls;
+  const tollText = tolls ? ` \xB7 Maut: ${tolls.total == null ? "unbekannt" : `${tolls.total.toFixed(2)} ${tolls.currency ?? "EUR"}`}${tolls.estimate ? " (Sch\xE4tzung)" : ""}` : "";
+  return `${map}<p class="route-summary"><strong>${distance}</strong> \xB7 ${duration} \xB7 ${escapeHtml(route.provider ?? "unbekannt")}${tollText}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
 }
 function buildNavigationLink(origin, destination) {
   if (!destination || !Number.isFinite(destination.latitude) || !Number.isFinite(destination.longitude)) return null;
@@ -195,10 +198,10 @@ var SmartCamperCard = class extends HTMLElement {
       const destination = route?.destination ?? route?.route_input?.destination ?? this.config.destination;
       const via = route?.via ?? route?.route_input?.via ?? this.routeVia;
       const calculate = origin && destination && vehicleId2 ? `<button class="route-calculate" type="button">Route berechnen</button>` : "";
-      const pointEditor = (point, label, index) => point ? `<span class="route-point" data-index="${index ?? ""}"><b>${label}</b> ${point.latitude}, ${point.longitude}${index == null ? "" : ` <button class="route-remove" type="button" data-index="${index}" aria-label="Zwischenstopp entfernen">\xD7</button>`}</span>` : `<span class="route-point missing"><b>${label}</b> nicht gesetzt</span>`;
+      const pointEditor = (point, label, index) => point ? `<span class="route-point" data-index="${index ?? ""}"><b>${label}</b> ${point.latitude}, ${point.longitude}${index == null ? "" : ` <button class="route-up" type="button" data-index="${index}" aria-label="Zwischenstopp nach oben">\u2191</button><button class="route-down" type="button" data-index="${index}" aria-label="Zwischenstopp nach unten">\u2193</button><button class="route-remove" type="button" data-index="${index}" aria-label="Zwischenstopp entfernen">\xD7</button>`}</span>` : `<span class="route-point missing"><b>${label}</b> nicht gesetzt</span>`;
       const navigation = buildNavigationLink(origin, destination);
       const exportButtons = route?.state === "ready" && origin && destination ? `<div class="route-actions"><button class="route-gpx" data-mode="route" type="button">GPX-Route</button><button class="route-gpx" data-mode="track" type="button">GPX-Track</button><button class="route-gpx" data-mode="combined" type="button">GPX kombiniert</button>${navigation ? `<a class="route-navigation" href="${navigation}" target="_blank" rel="noopener">Im Navi \xF6ffnen</a>` : ""}</div>` : "";
-      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-calculate,.route-gpx,.route-actions a{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId2 ?? "Kein Fahrzeug ausgew\xE4hlt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzuf\xFCgen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
+      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;cursor:crosshair}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-error{color:var(--error-color,#d32f2f)}.route-calculate,.route-gpx,.route-actions a,.route-reset{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId2 ?? "Kein Fahrzeug ausgew\xE4hlt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzuf\xFCgen</button> <button class="route-reset" type="button">Route zur\xFCcksetzen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
       this.querySelector(".route-add")?.addEventListener("click", () => {
         this.routeVia = [...via, { latitude: origin?.latitude ?? 0, longitude: origin?.longitude ?? 0 }];
         this.render();
@@ -208,6 +211,22 @@ var SmartCamperCard = class extends HTMLElement {
         this.routeVia = via.filter((_point, index) => index !== removeIndex);
         this.render();
       }));
+      const moveWaypoint = (button, delta) => {
+        const index = Number(button.dataset.index);
+        const nextIndex = index + delta;
+        if (nextIndex < 0 || nextIndex >= via.length) return;
+        const reordered = [...via];
+        [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+        this.routeVia = reordered;
+        this.render();
+      };
+      this.querySelectorAll(".route-up").forEach((button) => button.addEventListener("click", () => moveWaypoint(button, -1)));
+      this.querySelectorAll(".route-down").forEach((button) => button.addEventListener("click", () => moveWaypoint(button, 1)));
+      this.querySelector(".route-reset")?.addEventListener("click", () => {
+        this.routeVia = [];
+        this.config = { ...this.config, origin: void 0, destination: void 0, via: [] };
+        this.render();
+      });
       this.querySelectorAll(".route-gpx").forEach((button) => button.addEventListener("click", () => {
         if (route && origin && destination) downloadGpx(route, origin, destination, via, button.dataset.mode);
       }));

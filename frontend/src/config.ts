@@ -50,6 +50,8 @@ export type RouteView = {
   destination?: RoutePoint;
   via?: RoutePoint[];
   route_input?: { origin?: RoutePoint; destination?: RoutePoint; via?: RoutePoint[] };
+  error?: string;
+  metadata?: { tolls?: { total?: number | null; currency?: string | null; status?: string; estimate?: boolean | null } | null };
 };
 
 export type RoutePoint = { latitude: number; longitude: number; label?: string };
@@ -148,6 +150,7 @@ export function renderFuelStateHtml(status: string | undefined, stations: FuelSt
 }
 
 export function renderRouteHtml(route: RouteView | undefined, config: CardConfig): string {
+  if (route?.state === "error") return `<p class="route-error" role="alert">${escapeHtml(route.error ?? "Route konnte nicht berechnet werden.")}</p>`;
   if (!route || route.state !== "ready") return `<p class="route-empty" role="status">Keine berechnete Route vorhanden.</p>`;
   const distance = route.distance_m == null ? "–" : `${(route.distance_m / 1000).toFixed(1)} km`;
   const duration = route.duration_s == null ? "–" : `${Math.round(route.duration_s / 60)} min`;
@@ -156,7 +159,9 @@ export function renderRouteHtml(route: RouteView | undefined, config: CardConfig
   const map = points.length > 1
     ? `<svg class="route-map" viewBox="0 0 320 120" role="img" aria-label="Routenverlauf"><polyline points="${points.map((point, index) => `${(index / (points.length - 1)) * 300 + 10},${110 - (index % 2) * 45}`).join(" ")}" fill="none" stroke="var(--primary-color,#03a9f4)" stroke-width="5" stroke-linecap="round" /></svg>`
     : "";
-  return `${map}<p class="route-summary"><strong>${distance}</strong> · ${duration} · ${escapeHtml(route.provider ?? "unbekannt")}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
+  const tolls = route.metadata?.tolls;
+  const tollText = tolls ? ` · Maut: ${tolls.total == null ? "unbekannt" : `${tolls.total.toFixed(2)} ${tolls.currency ?? "EUR"}`}${tolls.estimate ? " (Schätzung)" : ""}` : "";
+  return `${map}<p class="route-summary"><strong>${distance}</strong> · ${duration} · ${escapeHtml(route.provider ?? "unbekannt")}${tollText}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
 }
 
 export function buildNavigationLink(origin: RoutePoint | undefined, destination: RoutePoint | undefined): string | null {

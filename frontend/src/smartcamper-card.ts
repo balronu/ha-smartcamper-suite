@@ -101,12 +101,12 @@ class SmartCamperCard extends HTMLElement {
       const calculate = origin && destination && vehicleId
         ? `<button class="route-calculate" type="button">Route berechnen</button>` : "";
       const pointEditor = (point: RoutePoint | undefined, label: string, index?: number): string => point
-        ? `<span class="route-point" data-index="${index ?? ""}"><b>${label}</b> ${point.latitude}, ${point.longitude}${index == null ? "" : ` <button class="route-remove" type="button" data-index="${index}" aria-label="Zwischenstopp entfernen">×</button>`}</span>`
+        ? `<span class="route-point" data-index="${index ?? ""}"><b>${label}</b> ${point.latitude}, ${point.longitude}${index == null ? "" : ` <button class="route-up" type="button" data-index="${index}" aria-label="Zwischenstopp nach oben">↑</button><button class="route-down" type="button" data-index="${index}" aria-label="Zwischenstopp nach unten">↓</button><button class="route-remove" type="button" data-index="${index}" aria-label="Zwischenstopp entfernen">×</button>`}</span>`
         : `<span class="route-point missing"><b>${label}</b> nicht gesetzt</span>`;
       const navigation = buildNavigationLink(origin, destination);
       const exportButtons = route?.state === "ready" && origin && destination
         ? `<div class="route-actions"><button class="route-gpx" data-mode="route" type="button">GPX-Route</button><button class="route-gpx" data-mode="track" type="button">GPX-Track</button><button class="route-gpx" data-mode="combined" type="button">GPX kombiniert</button>${navigation ? `<a class="route-navigation" href="${navigation}" target="_blank" rel="noopener">Im Navi öffnen</a>` : ""}</div>` : "";
-      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-calculate,.route-gpx,.route-actions a{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzufügen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
+      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;cursor:crosshair}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-error{color:var(--error-color,#d32f2f)}.route-calculate,.route-gpx,.route-actions a,.route-reset{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzufügen</button> <button class="route-reset" type="button">Route zurücksetzen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
       this.querySelector(".route-add")?.addEventListener("click", () => {
         this.routeVia = [...via, { latitude: origin?.latitude ?? 0, longitude: origin?.longitude ?? 0 }];
         this.render();
@@ -116,6 +116,22 @@ class SmartCamperCard extends HTMLElement {
         this.routeVia = via.filter((_point, index) => index !== removeIndex);
         this.render();
       }));
+      const moveWaypoint = (button: HTMLButtonElement, delta: number): void => {
+        const index = Number(button.dataset.index);
+        const nextIndex = index + delta;
+        if (nextIndex < 0 || nextIndex >= via.length) return;
+        const reordered = [...via];
+        [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+        this.routeVia = reordered;
+        this.render();
+      };
+      this.querySelectorAll<HTMLButtonElement>(".route-up").forEach((button) => button.addEventListener("click", () => moveWaypoint(button, -1)));
+      this.querySelectorAll<HTMLButtonElement>(".route-down").forEach((button) => button.addEventListener("click", () => moveWaypoint(button, 1)));
+      this.querySelector(".route-reset")?.addEventListener("click", () => {
+        this.routeVia = [];
+        this.config = { ...this.config, origin: undefined, destination: undefined, via: [] };
+        this.render();
+      });
       this.querySelectorAll<HTMLButtonElement>(".route-gpx").forEach((button) => button.addEventListener("click", () => {
         if (route && origin && destination) downloadGpx(route, origin, destination, via, button.dataset.mode as "route" | "track" | "combined");
       }));

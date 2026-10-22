@@ -2,9 +2,15 @@ import {
   type FuelStationView,
   type CardConfig,
   renderFuelStateHtml,
+  renderRouteHtml,
+  type RouteView,
+  type RoutePoint,
+  buildNavigationLink,
+  downloadGpx,
   selectVehicle,
   validateConfig,
 } from "./config";
+import * as L from "leaflet";
 
 type HassState = { state?: string; attributes?: Record<string, unknown> };
 type HassLike = { states?: Record<string, HassState>; callService?: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown> };
@@ -12,6 +18,8 @@ type HassLike = { states?: Record<string, HassState>; callService?: (domain: str
 class SmartCamperCard extends HTMLElement {
   private config: CardConfig = { type: "custom:smartcamper-card", module: "travel_journal" };
   private _hass?: HassLike;
+  private routeVia: RoutePoint[] = [];
+  private routeMap?: L.Map;
 
   setConfig(raw: CardConfig): void {
     this.config = validateConfig(raw);
@@ -43,6 +51,8 @@ class SmartCamperCard extends HTMLElement {
       <label>Anzahl <input data-field="visible_station_count" type="number" min="0" /></label>
       <label>Navigation <select data-field="navigation_provider"><option value="auto">Automatisch</option><option value="apple">Apple</option><option value="google">Google</option><option value="waze">Waze</option></select></label>
       <label>Abrufmodus <select data-field="fetch_mode"><option value="automatic">Automatisch</option><option value="manual">Manuell</option></select></label>
+      <label>Route Start (JSON) <input data-field="origin" placeholder='{"latitude":50,"longitude":8}' /></label>
+      <label>Route Ziel (JSON) <input data-field="destination" placeholder='{"latitude":51,"longitude":9}' /></label>
       <label><input data-field="show_prices" type="checkbox" checked /> Preise</label>
       <label><input data-field="show_name" type="checkbox" checked /> Tankstellenname</label>
       <label><input data-field="show_distance" type="checkbox" checked /> Entfernung</label>
@@ -60,9 +70,12 @@ class SmartCamperCard extends HTMLElement {
       const navigation_provider = (editor.querySelector("[data-field=navigation_provider]") as HTMLSelectElement).value as CardConfig["navigation_provider"];
       const fetch_mode = (editor.querySelector("[data-field=fetch_mode]") as HTMLSelectElement).value as CardConfig["fetch_mode"];
       const visible_station_count = Number((editor.querySelector("[data-field=visible_station_count]") as HTMLInputElement).value) || 0;
+      const parsePoint = (field: string): { latitude: number; longitude: number } | undefined => {
+        try { const value = JSON.parse((editor.querySelector(`[data-field=${field}]`) as HTMLInputElement).value); return value.latitude != null && value.longitude != null ? value : undefined; } catch { return undefined; }
+      };
       const bool = (field: string): boolean => (editor.querySelector(`[data-field=${field}]`) as HTMLInputElement).checked;
       editor.dispatchEvent(new CustomEvent("config-changed", {
-        bubbles: true, composed: true, detail: { config: { ...this.config, module, vehicle_id, display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } },
+        bubbles: true, composed: true, detail: { config: { ...this.config, module, vehicle_id, origin: parsePoint("origin"), destination: parsePoint("destination"), display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } },
       }));
     };
     editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", emit));
@@ -79,6 +92,84 @@ class SmartCamperCard extends HTMLElement {
 
   private render(): void {
     if (!this.isConnected && typeof document === "undefined") return;
+    if (this.config.module === "route_planner") {
+      this.routeMap?.remove();
+      const states = this._hass?.states ?? {};
+      const vehicleId = selectVehicle(this.config, states);
+      const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId && state.attributes?.beta !== undefined);
+      const route = sensor?.attributes as RouteView | undefined;
+      const origin = route?.origin ?? route?.route_input?.origin ?? this.config.origin;
+      const destination = route?.destination ?? route?.route_input?.destination ?? this.config.destination;
+      const via = route?.via ?? route?.route_input?.via ?? this.routeVia;
+      const calculate = origin && destination && vehicleId
+        ? `<button class="route-calculate" type="button">Route berechnen</button>` : "";
+      const pointEditor = (point: RoutePoint | undefined, label: string, index?: number): string => point
+        ? `<span class="route-point" data-index="${index ?? ""}"><b>${label}</b> ${point.latitude}, ${point.longitude}${index == null ? "" : ` <button class="route-up" type="button" data-index="${index}" aria-label="Zwischenstopp nach oben">↑</button><button class="route-down" type="button" data-index="${index}" aria-label="Zwischenstopp nach unten">↓</button><button class="route-remove" type="button" data-index="${index}" aria-label="Zwischenstopp entfernen">×</button>`}</span>`
+        : `<span class="route-point missing"><b>${label}</b> nicht gesetzt</span>`;
+      const navigation = buildNavigationLink(origin, destination);
+      const exportButtons = route?.state === "ready" && origin && destination
+        ? `<div class="route-actions"><button class="route-gpx" data-mode="route" type="button">GPX-Route</button><button class="route-gpx" data-mode="track" type="button">GPX-Track</button><button class="route-gpx" data-mode="combined" type="button">GPX kombiniert</button>${navigation ? `<a class="route-navigation" href="${navigation}" target="_blank" rel="noopener">Im Navi öffnen</a>` : ""}</div>` : "";
+      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-leaflet-map{width:100%;height:180px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;margin-bottom:8px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;cursor:crosshair}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-error{color:var(--error-color,#d32f2f)}.route-calculate,.route-gpx,.route-actions a,.route-reset{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzufügen</button> <button class="route-reset" type="button">Route zurücksetzen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
+      this.querySelector(".route-add")?.addEventListener("click", () => {
+        this.routeVia = [...via, { latitude: origin?.latitude ?? 0, longitude: origin?.longitude ?? 0 }];
+        this.render();
+      });
+      const leafletHost = this.querySelector<HTMLElement>(".route-leaflet-map");
+      if (leafletHost && route?.geometry && route.geometry.length > 1) {
+        try {
+          this.routeMap = L.map(leafletHost, { zoomControl: false, attributionControl: false });
+          const line = route.geometry.map((point) => [point.latitude, point.longitude] as [number, number]);
+          this.routeMap.fitBounds(line, { padding: [10, 10] });
+          L.polyline(line, { color: "#03a9f4", weight: 5 }).addTo(this.routeMap);
+          window.setTimeout(() => this.routeMap?.invalidateSize(), 0);
+        } catch {
+          this.routeMap = undefined;
+        }
+      }
+      this.querySelector(".route-map")?.addEventListener("click", (event) => {
+        const geometry = route?.geometry ?? [];
+        if (geometry.length < 2) return;
+        const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (event as MouseEvent).clientX - bounds.left) / bounds.width);
+        const y = Math.max(0, Math.min(1, (event as MouseEvent).clientY - bounds.top) / bounds.height);
+        const latitudes = geometry.map((point) => point.latitude);
+        const longitudes = geometry.map((point) => point.longitude);
+        this.routeVia = [...via, {
+          latitude: Math.min(...latitudes) + (1 - y) * (Math.max(...latitudes) - Math.min(...latitudes)),
+          longitude: Math.min(...longitudes) + x * (Math.max(...longitudes) - Math.min(...longitudes)),
+          label: "Karten-Zwischenstopp",
+        }];
+        this.render();
+      });
+      this.querySelectorAll<HTMLButtonElement>(".route-remove").forEach((button) => button.addEventListener("click", () => {
+        const removeIndex = Number(button.dataset.index);
+        this.routeVia = via.filter((_point, index) => index !== removeIndex);
+        this.render();
+      }));
+      const moveWaypoint = (button: HTMLButtonElement, delta: number): void => {
+        const index = Number(button.dataset.index);
+        const nextIndex = index + delta;
+        if (nextIndex < 0 || nextIndex >= via.length) return;
+        const reordered = [...via];
+        [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+        this.routeVia = reordered;
+        this.render();
+      };
+      this.querySelectorAll<HTMLButtonElement>(".route-up").forEach((button) => button.addEventListener("click", () => moveWaypoint(button, -1)));
+      this.querySelectorAll<HTMLButtonElement>(".route-down").forEach((button) => button.addEventListener("click", () => moveWaypoint(button, 1)));
+      this.querySelector(".route-reset")?.addEventListener("click", () => {
+        this.routeVia = [];
+        this.config = { ...this.config, origin: undefined, destination: undefined, via: [] };
+        this.render();
+      });
+      this.querySelectorAll<HTMLButtonElement>(".route-gpx").forEach((button) => button.addEventListener("click", () => {
+        if (route && origin && destination) downloadGpx(route, origin, destination, via, button.dataset.mode as "route" | "track" | "combined");
+      }));
+      this.querySelector(".route-calculate")?.addEventListener("click", () => {
+        if (vehicleId && origin && destination && this._hass?.callService) void this._hass.callService("smartcamper_suite", "calculate_route", { vehicle_id: vehicleId, origin, destination, via });
+      });
+      return;
+    }
     if (this.config.module !== "fuel_stations") {
       this.innerHTML = `<article><strong>SmartCamper Suite</strong><p>${this.config.module}</p><small>Modul ist vorbereitet.</small></article>`;
       return;

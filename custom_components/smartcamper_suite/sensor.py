@@ -14,8 +14,8 @@ async def async_setup_entry(
 ) -> None:
     runtime: SuiteRuntime = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        FuelStationsSensor(runtime, vehicle_id)
-        for vehicle_id in runtime.fuel.vehicles
+        [FuelStationsSensor(runtime, vehicle_id) for vehicle_id in runtime.fuel.vehicles]
+        + [RoutePlannerSensor(runtime, vehicle_id) for vehicle_id in runtime.route.vehicles]
     )
 
 
@@ -94,3 +94,43 @@ class FuelStationsSensor(SensorEntity):
             return
         await self._runtime.fuel.async_search(self._vehicle_id, latitude, longitude)
         self.async_write_ha_state()
+
+
+class RoutePlannerSensor(SensorEntity):
+    """Expose the last explicit route without starting background work."""
+
+    _attr_should_poll = False
+    _attr_native_unit_of_measurement = "km"
+
+    def __init__(self, runtime: SuiteRuntime, vehicle_id: str) -> None:
+        self._runtime = runtime
+        self._vehicle_id = vehicle_id
+        self._attr_name = f"{runtime.route.vehicles[vehicle_id].name} Route"
+        self._attr_unique_id = f"{vehicle_id}_route_planner"
+
+    @property
+    def native_value(self) -> float | None:
+        result = self._runtime.route.results.get(self._vehicle_id)
+        return round(result.distance_m / 1000, 1) if result else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        result = self._runtime.route.results.get(self._vehicle_id)
+        if result is None:
+            return {"vehicle_id": self._vehicle_id, "state": "idle", "warnings": []}
+        request = self._runtime.route.requests.get(self._vehicle_id)
+        return {
+            "vehicle_id": self._vehicle_id,
+            "state": "ready",
+            "provider": result.provider,
+            "duration_s": result.duration_s,
+            "geometry": [point.as_dict() for point in result.geometry],
+            "warnings": [warning.message for warning in result.warnings],
+            "metadata": result.metadata,
+            "beta": bool(result.metadata.get("beta")),
+            "route_input": {
+                "origin": request.origin.as_dict(),
+                "destination": request.destination.as_dict(),
+                "via": [point.as_dict() for point in request.via],
+            } if request else None,
+        }

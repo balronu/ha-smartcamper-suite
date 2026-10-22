@@ -19,6 +19,7 @@ const hass = {
       },
     },
     "sensor.opel_fuel_stations": { attributes: { vehicle_id: "opel", state: "loading", stations: [] } },
+    "sensor.womo_route": { attributes: { vehicle_id: "womo", state: "ready", beta: true, provider: "nakordoni_motorhome", distance_m: 123456, duration_s: 7200, geometry: [{ latitude: 50, longitude: 8 }, { latitude: 50.5, longitude: 8.5 }, { latitude: 51, longitude: 9 }], warnings: ["Motorhome-Routing ist Beta"] } },
   },
 };
 
@@ -65,7 +66,7 @@ try {
     card.setConfig({ type: "custom:smartcamper-card", module: "route_planner" });
     return card.textContent;
   });
-  assert.match(moduleText, /vorbereitet/);
+  assert.match(moduleText, /Camper Route Planner/);
 
   const editorResult = await page.evaluate(() => {
     const card = document.createElement("smartcamper-card");
@@ -80,6 +81,24 @@ try {
     return { sort: detail.config.sort_mode, fetch: detail.config.fetch_mode };
   });
   assert.deepEqual(editorResult, { sort: "price", fetch: "manual" });
+  await page.evaluate(() => document.querySelector("#first").setConfig({ type: "custom:smartcamper-card", module: "route_planner", vehicle_id: "womo", origin: { latitude: 50, longitude: 8 }, destination: { latitude: 51, longitude: 9 } }));
+  assert.equal(await page.locator("#first .route-map").count(), 1);
+  assert.match(await page.locator("#first").innerText(), /123\.5 km/);
+  assert.match(await page.locator("#first").innerText(), /Beta/);
+  assert.equal(await page.locator("#first .route-navigation").count(), 1);
+  await page.locator("#first .route-add").click();
+  assert.equal(await page.locator("#first .route-remove").count(), 1);
+  await page.locator("#first .route-remove").click();
+  await page.locator("#first .route-map").click({ position: { x: 160, y: 60 } });
+  assert.equal(await page.locator("#first .route-remove").count(), 1);
+  await page.locator("#first .route-remove").click();
+  const download = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#first .route-gpx[data-mode=combined]").click(),
+  ]);
+  assert.match(download[0].suggestedFilename(), /smartcamper-route-combined\.gpx/);
+  await page.locator("#first .route-calculate").click();
+  assert.deepEqual(calls.at(-1), ["smartcamper_suite", "calculate_route", { vehicle_id: "womo", origin: { latitude: 50, longitude: 8 }, destination: { latitude: 51, longitude: 9 }, via: [] }]);
   console.log("browser card assertions: PASS");
 } finally {
   await browser.close();

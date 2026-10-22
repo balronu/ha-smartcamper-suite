@@ -42,7 +42,7 @@ class ApiClient:
             raise ProviderError("live transport is disabled in Phase 2A")
         try:
             result = await asyncio.wait_for(self.transport(method, url, **kwargs), policy.timeout)
-        except asyncio.TimeoutError as err:
+        except TimeoutError as err:
             raise ProviderError(f"timeout calling {service_key}") from err
         except Exception as err:
             raise ProviderError(f"provider request failed for {service_key}") from err

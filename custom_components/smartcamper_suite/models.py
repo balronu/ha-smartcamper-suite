@@ -25,7 +25,7 @@ class Vehicle:
     archived: bool = False
 
     @classmethod
-    def create(cls, name: str, **kwargs: Any) -> "Vehicle":
+    def create(cls, name: str, **kwargs: Any) -> Vehicle:
         vehicle = cls(vehicle_id=uuid4().hex, name=name.strip(), **kwargs)
         vehicle.validate()
         return vehicle
@@ -47,7 +47,7 @@ class Vehicle:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Vehicle":
+    def from_dict(cls, data: dict[str, Any]) -> Vehicle:
         vehicle = cls(**data)
         vehicle.validate()
         return vehicle

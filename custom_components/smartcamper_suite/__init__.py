@@ -12,10 +12,10 @@ except ImportError:  # Allows domain-layer tests without Home Assistant installe
 from .api import ApiClient
 from .auth import CredentialStore
 from .const import DOMAIN
+from .frontend import async_register_frontend, async_unregister_frontend
 from .modules import ModuleManager
 from .providers import ProviderRegistry
 from .storage import SuiteStore
-from .frontend import async_register_frontend, async_unregister_frontend
 
 PLATFORMS: list[str] = []
 

@@ -30,7 +30,7 @@ class ModuleManager:
         for runtime in self.modules.values():
             try:
                 await runtime.async_setup(context)
-            except Exception as err:  # isolate module failures
+            except Exception as err:  # noqa: BLE001  # isolate module failures
                 runtime.error = type(err).__name__
 
     async def async_unload(self) -> None:

@@ -87,9 +87,8 @@ try {
   assert.match(moduleText, /Camper Route Planner/);
 
   const editorResult = await page.evaluate(() => {
-    const card = document.createElement("smartcamper-card");
-    document.body.append(card);
-    const editor = card.getConfigElement();
+    const CardElement = customElements.get("smartcamper-card");
+    const editor = CardElement.getConfigElement();
     editor.id = "smartcamper-card-editor";
     document.body.append(editor);
     let detail;

@@ -97,6 +97,86 @@ def async_register(hass: Any) -> None:
         await hass.async_add_executor_job(selected.journal.store.dismiss_suggestion, msg["suggestion_id"])
         connection.send_result(msg["id"], {})
 
-    for command in (ws_list, ws_create_trip, ws_analyze_gpx, ws_import_gpx, ws_export_pdf, ws_list_suggestions, ws_generate_suggestions, ws_accept_suggestion, ws_dismiss_suggestion):
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/list_vehicles", vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_list_vehicles(_hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        connection.send_result(msg["id"], {"vehicles": [{"vehicle_id": item.vehicle_id, "name": item.name, "tracker_entity_id": item.tracker_entity_id} for item in selected.journal.vehicles.values()]})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/diagnostics", "vehicle_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_diagnostics(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        summary = await hass.async_add_executor_job(selected.journal.store.summary, msg["vehicle_id"])
+        connection.send_result(msg["id"], {"database": selected.journal.store.path.name, "schema_version": 2, "module_enabled": selected.journal.enabled, "summary": summary})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/update_trip", "trip_id": str, vol.Optional("entry_id"): str, vol.Optional("title"): str, vol.Optional("description"): str, vol.Optional("destination"): str, vol.Optional("started_at"): str, vol.Optional("ended_at"): str, vol.Optional("status"): str, vol.Optional("start_date"): str, vol.Optional("end_date"): str})
+    @websocket_api.async_response
+    async def ws_update_trip(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"title", "description", "destination", "started_at", "ended_at", "status", "start_date", "end_date"}}
+        await hass.async_add_executor_job(selected.journal.store.update_trip, msg["trip_id"], **fields)
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/delete_trip", "trip_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_delete_trip(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.delete_trip, msg["trip_id"])
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/create_stop", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("name", default="Zwischenstopp"): str, vol.Optional("occurred_at"): str, vol.Optional("latitude"): float, vol.Optional("longitude"): float, vol.Optional("description", default=""): str, vol.Optional("category", default="other"): str})
+    @websocket_api.async_response
+    async def ws_create_stop(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"trip_id", "name", "occurred_at", "latitude", "longitude", "description", "category"}}
+        stop_id = await hass.async_add_executor_job(selected.journal.store.create_stop, msg["vehicle_id"], **fields)
+        connection.send_result(msg["id"], {"stop_id": stop_id})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/create_expense", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("occurred_at"): str, vol.Optional("category", default="other"): str, vol.Optional("amount_minor", default=0): int, vol.Optional("currency", default="EUR"): str, vol.Optional("note", default=""): str})
+    @websocket_api.async_response
+    async def ws_create_expense(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"trip_id", "occurred_at", "category", "amount_minor", "currency", "note"}}
+        expense_id = await hass.async_add_executor_job(selected.journal.store.create_expense, msg["vehicle_id"], **fields)
+        connection.send_result(msg["id"], {"expense_id": expense_id})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/upsert_overnight", "place_id": str, vol.Optional("entry_id"): str, vol.Optional("place_kind", default="other"): str, vol.Optional("website_url"): str, vol.Optional("booking_note"): str, vol.Optional("large_rv_suitable"): bool})
+    @websocket_api.async_response
+    async def ws_upsert_overnight(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"place_kind", "website_url", "booking_note", "large_rv_suitable"}}
+        await hass.async_add_executor_job(selected.journal.store.upsert_overnight, msg["place_id"], **fields)
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/upsert_rating", "place_id": str, "overall": int, vol.Optional("entry_id"): str, vol.Optional("large_rv_access"): int, vol.Optional("space_maneuvering"): int, vol.Optional("facilities"): int, vol.Optional("surroundings"): int, vol.Optional("review_text", default=""): str})
+    @websocket_api.async_response
+    async def ws_upsert_rating(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"large_rv_access", "space_maneuvering", "facilities", "surroundings", "review_text"}}
+        await hass.async_add_executor_job(selected.journal.store.upsert_rating, msg["place_id"], msg["overall"], **fields)
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/delete_rating", "place_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_delete_rating(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.delete_rating, msg["place_id"])
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/transition_trip", "trip_id": str, "status": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_transition_trip(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.update_trip, msg["trip_id"], status=msg["status"])
+        connection.send_result(msg["id"], {"status": msg["status"]})
+
+    for command in (
+        ws_list, ws_create_trip, ws_analyze_gpx, ws_import_gpx, ws_export_pdf,
+        ws_list_suggestions, ws_generate_suggestions, ws_accept_suggestion,
+        ws_dismiss_suggestion, ws_list_vehicles, ws_diagnostics, ws_update_trip,
+        ws_delete_trip, ws_create_stop, ws_create_expense, ws_upsert_overnight,
+        ws_upsert_rating, ws_delete_rating, ws_transition_trip,
+    ):
         websocket_api.async_register_command(hass, command)
     hass.data[DOMAIN]["journal_api_registered"] = True

@@ -74,11 +74,17 @@ def test_gpx_preview_import_pdf_and_suggestion_contracts(tmp_path):
     assert store.import_gpx(preview, trip_id)["reason"] == "already_imported"
     suggestions = store.generate_suggestions("vehicle-a", minimum_minutes=10, radius_m=150)
     assert suggestions
-    stop_id = store.accept_suggestion(suggestions[0]["id"], name="Rast")
+    stop_id = store.accept_suggestion(suggestions[0]["id"], name="Rast", trip_id=trip_id)
     store.upsert_overnight(stop_id, place_kind="campsite", large_rv_suitable=True)
     store.upsert_rating(stop_id, 5, facilities=4, review_text="Gut")
+    store.create_expense("vehicle-a", trip_id=trip_id, category="fuel", amount_minor=1234)
     pdf = store.render_pdf("vehicle-a", trip_id)
     assert pdf.startswith(b"%PDF-1.4") and pdf.endswith(b"%%EOF\n")
+    assert b"Reisebericht" in pdf
+    assert b"GPX-Reise" in pdf
+    assert b"Rast" in pdf
+    assert b"fuel" in pdf
+    assert b"GPS-Punkte" in pdf
     calls = []
     assert store.reverse_geocode(50.0, 8.0, lambda lat, lon: calls.append((lat, lon)) or "Alpenpunkt") == "Alpenpunkt"
     assert store.reverse_geocode(50.0, 8.0, lambda _lat, _lon: "unerwartet") == "Alpenpunkt"

@@ -331,14 +331,82 @@ class JournalStore:
         return {"imported": True, "file_hash": digest, "point_count": preview["point_count"]}
 
     def render_pdf(self, vehicle_id: str, trip_id: str, language: str = "de") -> bytes:
-        """Create a minimal valid, dependency-free PDF report for offline use."""
+        """Create a dependency-free, text report with the stable data sections.
+
+        ReportLab is intentionally not a runtime dependency of the suite.  The
+        generated document is therefore deliberately conservative (Helvetica,
+        A4, deterministic text layout), but it contains the same journal data
+        sections needed by the export contract and remains usable offline.
+        """
         trip = next((item for item in self.list_trips(vehicle_id) if item["id"] == trip_id), None)
         if trip is None:
             raise ValueError("trip_not_found")
-        title = str(trip["title"]).replace("(", "\\(").replace(")", "\\)")
+        related = self.list_related(vehicle_id, trip_id)
+        summary = self.summary(vehicle_id)
         label = "Reisebericht" if language == "de" else "Travel report"
-        stream = f"BT /F1 18 Tf 72 740 Td ({label}) Tj 0 -30 Td /F1 12 Tf ({title}) Tj 0 -24 Td (Vehicle: {vehicle_id}) Tj ET".encode()
-        objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>", b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream"]
+        sections = {
+            "trip": "Reiseinformationen" if language == "de" else "Trip information",
+            "stays": "Aufenthalte" if language == "de" else "Stays",
+            "stops": "Zwischenstopps" if language == "de" else "Stops",
+            "expenses": "Kosten" if language == "de" else "Expenses",
+            "gps": "GPS-Informationen" if language == "de" else "GPS information",
+        }
+        lines = [
+            label,
+            str(trip["title"]),
+            f"Fahrzeug / Vehicle: {vehicle_id}",
+            f"Status: {trip['status']}",
+            f"Ziel / Destination: {trip.get('destination') or '-'}",
+            f"Beginn / Start: {trip.get('started_at') or '-'}",
+            f"Ende / End: {trip.get('ended_at') or '-'}",
+            f"Beschreibung / Description: {trip.get('description') or '-'}",
+            "",
+            sections["stays"],
+        ]
+        lines.extend(f"- {item['name']} | {item['started_at']} – {item.get('ended_at') or '-'} | {item.get('address') or '-'}" for item in related["stays"])
+        if not related["stays"]:
+            lines.append("- keine / none")
+        lines.append(sections["stops"])
+        lines.extend(f"- {item['name']} | {item['occurred_at']} | {item.get('description') or '-'}" for item in related["stops"])
+        if not related["stops"]:
+            lines.append("- keine / none")
+        lines.append(sections["expenses"])
+        expense_total = 0
+        for item in related["expenses"]:
+            expense_total += int(item["amount_minor"])
+            lines.append(f"- {item['category']} | {item['amount_minor'] / 100:.2f} {item['currency']} | {item.get('note') or '-'}")
+        if not related["expenses"]:
+            lines.append("- keine / none")
+        lines.append(f"Summe / Total: {expense_total / 100:.2f} EUR")
+        lines.extend(("", sections["gps"], f"GPS-Punkte / points: {summary['gps_point_count']}"))
+
+        def pdf_escape(value: str) -> bytes:
+            return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)").encode("latin-1", "replace")
+
+        page_lines = [lines[index : index + 42] for index in range(0, len(lines), 42)] or [[label]]
+        content_streams: list[bytes] = []
+        for page in page_lines:
+            commands = [b"BT", b"/F1 16 Tf", b"72 780 Td"]
+            for index, line in enumerate(page):
+                if index == 1:
+                    commands.append(b"/F1 12 Tf")
+                commands.append(b"(" + pdf_escape(line) + b") Tj")
+                commands.append(b"0 -17 Td")
+            commands.append(b"ET")
+            content_streams.append(b"\n".join(commands))
+        page_count = len(content_streams)
+        pages_id = 2
+        font_id = 3
+        first_page_id = 4
+        first_content_id = first_page_id + page_count
+        objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"", b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+        page_refs = " ".join(f"{first_page_id + index} 0 R" for index in range(page_count))
+        objects[1] = f"<< /Type /Pages /Kids [{page_refs}] /Count {page_count} >>".encode()
+        for index in range(page_count):
+            content_id = first_content_id + index
+            objects.append(f"<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>".encode())
+        for stream in content_streams:
+            objects.append(b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream")
         result = bytearray(b"%PDF-1.4\n")
         offsets = [0]
         for index, obj in enumerate(objects, 1):

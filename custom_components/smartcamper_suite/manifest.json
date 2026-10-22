@@ -1,0 +1,12 @@
+{
+  "domain": "smartcamper_suite",
+  "name": "SmartCamper Suite",
+  "codeowners": ["@balronu"],
+  "config_flow": true,
+  "after_dependencies": ["frontend", "http"],
+  "documentation": "https://github.com/balronu/ha-smartcamper-suite",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/balronu/ha-smartcamper-suite/issues",
+  "requirements": [],
+  "version": "0.1.0a1"
+}

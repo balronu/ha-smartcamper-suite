@@ -171,12 +171,110 @@ def async_register(hass: Any) -> None:
         await hass.async_add_executor_job(selected.journal.store.update_trip, msg["trip_id"], status=msg["status"])
         connection.send_result(msg["id"], {"status": msg["status"]})
 
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/route", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("drive_ids"): [str]})
+    @websocket_api.async_response
+    async def ws_route(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        result = await hass.async_add_executor_job(selected.journal.store.route_segments, msg["vehicle_id"], msg.get("trip_id"), msg.get("drive_ids"))
+        connection.send_result(msg["id"], {"segments": result})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/list_drives", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str})
+    @websocket_api.async_response
+    async def ws_list_drives(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        result = await hass.async_add_executor_job(selected.journal.store.list_drives, msg["vehicle_id"], msg.get("trip_id"))
+        connection.send_result(msg["id"], {"drives": result})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/link_drives", "trip_id": str, "drive_ids": [str], vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_link_drives(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.link_drives, msg["trip_id"], msg["drive_ids"])
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/unlink_drive", "trip_id": str, "drive_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_unlink_drive(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.unlink_drive, msg["trip_id"], msg["drive_id"])
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/create_manual_drive", "vehicle_id": str, "occurred_at": str, "start_location": str, "end_location": str, "distance_km": float, vol.Optional("duration_minutes"): int, vol.Optional("trip_id"): str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_create_manual_drive(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        drive_id = await hass.async_add_executor_job(selected.journal.store.create_manual_drive, msg["vehicle_id"], msg["occurred_at"], msg["start_location"], msg["end_location"], msg["distance_km"], msg.get("duration_minutes"), msg.get("trip_id"))
+        connection.send_result(msg["id"], {"drive_id": drive_id})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/update_manual_drive", "drive_id": str, vol.Optional("entry_id"): str, vol.Optional("started_at"): str, vol.Optional("ended_at"): str, vol.Optional("start_label"): str, vol.Optional("end_label"): str, vol.Optional("manual_distance_km"): float})
+    @websocket_api.async_response
+    async def ws_update_manual_drive(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"started_at", "ended_at", "start_label", "end_label", "manual_distance_km"}}
+        await hass.async_add_executor_job(selected.journal.store.update_manual_drive, msg["drive_id"], **fields)
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/delete_manual_drive", "drive_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_delete_manual_drive(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.delete_manual_drive, msg["drive_id"])
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/assign_interruption", "trip_id": str, "interruption_id": str, "status": str, vol.Optional("stop_id"): str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_assign_interruption(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.assign_interruption, msg["trip_id"], msg["interruption_id"], msg["status"], msg.get("stop_id"))
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/create_stop_from_interruption", "vehicle_id": str, "trip_id": str, "interruption_id": str, "name": str, vol.Optional("place_type", default="other"): str, vol.Optional("address", default=""): str, vol.Optional("description", default=""): str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_create_stop_from_interruption(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        stop_id = await hass.async_add_executor_job(selected.journal.store.create_stop_from_interruption, msg["vehicle_id"], msg["trip_id"], msg["interruption_id"], msg["name"], place_type=msg.get("place_type", "other"), address=msg.get("address", ""), description=msg.get("description", ""))
+        connection.send_result(msg["id"], {"stop_id": stop_id})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/update_stop", "stop_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("drive_id"): str, vol.Optional("name"): str, vol.Optional("occurred_at"): str, vol.Optional("latitude"): float, vol.Optional("longitude"): float, vol.Optional("description"): str, vol.Optional("category"): str})
+    @websocket_api.async_response
+    async def ws_update_stop(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"trip_id", "drive_id", "name", "occurred_at", "latitude", "longitude", "description", "category"}}
+        await hass.async_add_executor_job(selected.journal.store.update_stop, msg["stop_id"], **fields)
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/delete_stop", "stop_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_delete_stop(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.delete_stop, msg["stop_id"])
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/update_expense", "expense_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("occurred_at"): str, vol.Optional("category"): str, vol.Optional("amount_minor"): int, vol.Optional("currency"): str, vol.Optional("note"): str})
+    @websocket_api.async_response
+    async def ws_update_expense(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        fields = {key: value for key, value in msg.items() if key in {"trip_id", "occurred_at", "category", "amount_minor", "currency", "note"}}
+        await hass.async_add_executor_job(selected.journal.store.update_expense, msg["expense_id"], **fields)
+        connection.send_result(msg["id"], {})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/delete_expense", "expense_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_delete_expense(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        await hass.async_add_executor_job(selected.journal.store.delete_expense, msg["expense_id"])
+        connection.send_result(msg["id"], {})
+
     for command in (
         ws_list, ws_create_trip, ws_analyze_gpx, ws_import_gpx, ws_export_pdf,
         ws_list_suggestions, ws_generate_suggestions, ws_accept_suggestion,
         ws_dismiss_suggestion, ws_list_vehicles, ws_diagnostics, ws_update_trip,
         ws_delete_trip, ws_create_stop, ws_create_expense, ws_upsert_overnight,
-        ws_upsert_rating, ws_delete_rating, ws_transition_trip,
+        ws_upsert_rating, ws_delete_rating, ws_transition_trip, ws_route,
+        ws_list_drives, ws_link_drives, ws_unlink_drive, ws_create_manual_drive,
+        ws_update_manual_drive, ws_delete_manual_drive, ws_assign_interruption,
+        ws_create_stop_from_interruption, ws_update_stop, ws_delete_stop,
+        ws_update_expense, ws_delete_expense,
     ):
         websocket_api.async_register_command(hass, command)
     hass.data[DOMAIN]["journal_api_registered"] = True

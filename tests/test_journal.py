@@ -90,3 +90,24 @@ def test_gpx_preview_import_pdf_and_suggestion_contracts(tmp_path):
     assert store.reverse_geocode(50.0, 8.0, lambda _lat, _lon: "unerwartet") == "Alpenpunkt"
     assert len(calls) == 1
     store.close()
+
+
+def test_drive_and_historical_update_contracts_are_transactional(tmp_path):
+    store = JournalStore(tmp_path / "suite.sqlite")
+    trip_id = store.create_trip("vehicle-a", "Fahrtentest")
+    drive_id = store.create_manual_drive("vehicle-a", "2026-01-01T10:00:00+00:00", "Start", "Ziel", 12.5, 30)
+    assert store.list_drives("vehicle-a")[0]["id"] == drive_id
+    assert store.route_segments("vehicle-a")[0]["source"] == "manual"
+    store.update_manual_drive(drive_id, manual_distance_km=13.0, start_label="Neuer Start")
+    assert store.list_drives("vehicle-a")[0]["manual_distance_km"] == 13.0
+    stop_id = store.create_stop("vehicle-a", trip_id=trip_id, name="Pause")
+    store.update_stop(stop_id, name="Pause 2")
+    expense_id = store.create_expense("vehicle-a", trip_id=trip_id, category="fuel", amount_minor=500)
+    store.update_expense(expense_id, amount_minor=750)
+    store.link_drives(trip_id, [drive_id])
+    store.unlink_drive(trip_id, drive_id)
+    store.delete_expense(expense_id)
+    store.delete_stop(stop_id)
+    store.delete_manual_drive(drive_id)
+    assert store.list_drives("vehicle-a") == []
+    store.close()

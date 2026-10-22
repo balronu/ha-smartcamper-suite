@@ -15,7 +15,7 @@ import sqlite3
 import threading
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -98,6 +98,22 @@ class JournalStore:
                   latitude REAL NOT NULL, longitude REAL NOT NULL, accuracy_m REAL,
                   UNIQUE(vehicle_id, recorded_at, latitude, longitude)
                 );
+                CREATE TABLE IF NOT EXISTS drives(
+                  id TEXT PRIMARY KEY, vehicle_id TEXT NOT NULL, started_at TEXT NOT NULL,
+                  ended_at TEXT NOT NULL, distance_m REAL, source TEXT NOT NULL DEFAULT 'manual',
+                  start_label TEXT, end_label TEXT, manual_distance_km REAL,
+                  created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS trip_drives(
+                  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+                  drive_id TEXT NOT NULL REFERENCES drives(id) ON DELETE CASCADE,
+                  linked_at TEXT NOT NULL, PRIMARY KEY(trip_id, drive_id), UNIQUE(drive_id)
+                );
+                CREATE TABLE IF NOT EXISTS interruption_links(
+                  trip_id TEXT NOT NULL, interruption_id TEXT NOT NULL,
+                  status TEXT NOT NULL, stop_id TEXT, updated_at TEXT NOT NULL,
+                  PRIMARY KEY(trip_id, interruption_id)
+                );
                 CREATE TABLE IF NOT EXISTS overnight_details(
                   place_id TEXT PRIMARY KEY, place_kind TEXT NOT NULL DEFAULT 'other', website_url TEXT,
                   booking_note TEXT, large_rv_suitable INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
@@ -139,6 +155,9 @@ class JournalStore:
                 "INSERT OR REPLACE INTO metadata(key,value) VALUES('schema_version',?)",
                 (str(JOURNAL_SCHEMA_VERSION),),
             )
+            stop_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(stops)")}
+            if "drive_id" not in stop_columns:
+                self.connection.execute("ALTER TABLE stops ADD COLUMN drive_id TEXT")
 
     def _row(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
         return dict(row) if row is not None else None
@@ -192,7 +211,12 @@ class JournalStore:
     def create_stop(self, vehicle_id: str, **fields: Any) -> str:
         stop_id, now = _id("stop"), _now()
         with self._lock, self.connection:
-            self.connection.execute("INSERT INTO stops(id,vehicle_id,trip_id,name,occurred_at,latitude,longitude,description,category,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (stop_id, vehicle_id, fields.get("trip_id"), str(fields.get("name", "Zwischenstopp")).strip() or "Zwischenstopp", fields.get("occurred_at", now), fields.get("latitude"), fields.get("longitude"), fields.get("description", ""), fields.get("category", "other"), now, now))
+            self.connection.execute("INSERT INTO stops(id,vehicle_id,trip_id,drive_id,name,occurred_at,latitude,longitude,description,category,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (stop_id, vehicle_id, fields.get("trip_id"), fields.get("drive_id"), str(fields.get("name", "Zwischenstopp")).strip() or "Zwischenstopp", fields.get("occurred_at", now), fields.get("latitude"), fields.get("longitude"), fields.get("description", ""), fields.get("category", "other"), now, now))
+        return stop_id
+
+    def create_stop_from_interruption(self, vehicle_id: str, trip_id: str, interruption_id: str, name: str, **fields: Any) -> str:
+        stop_id = self.create_stop(vehicle_id, trip_id=trip_id, name=name, category=fields.get("place_type", "other"), address=fields.get("address", ""), description=fields.get("description", ""), occurred_at=fields.get("occurred_at", _now()))
+        self.assign_interruption(trip_id, interruption_id, "assigned", stop_id)
         return stop_id
 
     def create_expense(self, vehicle_id: str, **fields: Any) -> str:
@@ -204,6 +228,110 @@ class JournalStore:
         with self._lock, self.connection:
             self.connection.execute("INSERT INTO expenses(id,vehicle_id,trip_id,occurred_at,category,amount_minor,currency,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (expense_id, vehicle_id, fields.get("trip_id"), fields.get("occurred_at", now), category, amount, str(fields.get("currency", "EUR")).upper(), fields.get("note", ""), now, now))
         return expense_id
+
+    def update_stop(self, stop_id: str, **fields: Any) -> None:
+        allowed = {"trip_id", "drive_id", "name", "occurred_at", "latitude", "longitude", "description", "category"}
+        values = {key: value for key, value in fields.items() if key in allowed}
+        if not values:
+            return
+        with self._lock, self.connection:
+            cursor = self.connection.execute(f"UPDATE stops SET {','.join(f'{key}=?' for key in values)},updated_at=? WHERE id=?", (*values.values(), _now(), stop_id))
+            if cursor.rowcount != 1:
+                raise ValueError("stop_not_found")
+
+    def delete_stop(self, stop_id: str) -> None:
+        with self._lock, self.connection:
+            self.connection.execute("DELETE FROM stops WHERE id=?", (stop_id,))
+
+    def update_expense(self, expense_id: str, **fields: Any) -> None:
+        allowed = {"trip_id", "occurred_at", "category", "amount_minor", "currency", "note"}
+        values = {key: value for key, value in fields.items() if key in allowed}
+        if "category" in values and values["category"] not in EXPENSE_CATEGORIES:
+            raise ValueError("expense_category_invalid")
+        if "amount_minor" in values and int(values["amount_minor"]) < 0:
+            raise ValueError("expense_amount_invalid")
+        if not values:
+            return
+        with self._lock, self.connection:
+            cursor = self.connection.execute(f"UPDATE expenses SET {','.join(f'{key}=?' for key in values)},updated_at=? WHERE id=?", (*values.values(), _now(), expense_id))
+            if cursor.rowcount != 1:
+                raise ValueError("expense_not_found")
+
+    def delete_expense(self, expense_id: str) -> None:
+        with self._lock, self.connection:
+            self.connection.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
+
+    def create_manual_drive(self, vehicle_id: str, occurred_at: str, start_location: str, end_location: str, distance_km: float, duration_minutes: int | None = None, trip_id: str | None = None) -> str:
+        if not vehicle_id or float(distance_km) < 0 or (duration_minutes is not None and int(duration_minutes) < 0):
+            raise ValueError("manual_drive_invalid")
+        try:
+            started = datetime.fromisoformat(occurred_at)
+        except ValueError as err:
+            raise ValueError("manual_drive_time_invalid") from err
+        ended = started + timedelta(minutes=int(duration_minutes or 0))
+        drive_id, now = _id("drive"), _now()
+        with self._lock, self.connection:
+            self.connection.execute("INSERT INTO drives(id,vehicle_id,started_at,ended_at,distance_m,source,start_label,end_label,manual_distance_km,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (drive_id, vehicle_id, started.isoformat(), ended.isoformat(), float(distance_km) * 1000, "manual", start_location, end_location, float(distance_km), now))
+            if trip_id:
+                self.connection.execute("INSERT INTO trip_drives(trip_id,drive_id,linked_at) VALUES(?,?,?)", (trip_id, drive_id, now))
+        return drive_id
+
+    def update_manual_drive(self, drive_id: str, **fields: Any) -> None:
+        allowed = {"started_at", "ended_at", "start_label", "end_label", "manual_distance_km"}
+        values = {key: value for key, value in fields.items() if key in allowed}
+        if "manual_distance_km" in values:
+            values["manual_distance_km"] = float(values["manual_distance_km"])
+            values["distance_m"] = values["manual_distance_km"] * 1000
+        if not values:
+            return
+        with self._lock, self.connection:
+            cursor = self.connection.execute(f"UPDATE drives SET {','.join(f'{key}=?' for key in values)} WHERE id=? AND source='manual'", (*values.values(), drive_id))
+            if cursor.rowcount != 1:
+                raise ValueError("manual_drive_not_found")
+
+    def delete_manual_drive(self, drive_id: str) -> None:
+        with self._lock, self.connection:
+            cursor = self.connection.execute("DELETE FROM drives WHERE id=? AND source='manual'", (drive_id,))
+            if cursor.rowcount != 1:
+                raise ValueError("manual_drive_not_found")
+
+    def list_drives(self, vehicle_id: str, trip_id: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT d.*,td.trip_id FROM drives d LEFT JOIN trip_drives td ON td.drive_id=d.id WHERE d.vehicle_id=?"
+        args: list[Any] = [vehicle_id]
+        if trip_id:
+            query += " AND td.trip_id=?"
+            args.append(trip_id)
+        with self._lock:
+            return [dict(row) for row in self.connection.execute(query + " ORDER BY d.started_at DESC", args).fetchall()]
+
+    def link_drives(self, trip_id: str, drive_ids: list[str]) -> None:
+        with self._lock, self.connection:
+            if self.connection.execute("SELECT 1 FROM trips WHERE id=?", (trip_id,)).fetchone() is None:
+                raise ValueError("trip_not_found")
+            for drive_id in drive_ids:
+                if self.connection.execute("SELECT 1 FROM drives WHERE id=?", (drive_id,)).fetchone() is None:
+                    raise ValueError("drive_not_found")
+                try:
+                    self.connection.execute("INSERT INTO trip_drives(trip_id,drive_id,linked_at) VALUES(?,?,?)", (trip_id, drive_id, _now()))
+                except sqlite3.IntegrityError as err:
+                    raise ValueError("drive_already_assigned") from err
+
+    def unlink_drive(self, trip_id: str, drive_id: str) -> None:
+        with self._lock, self.connection:
+            self.connection.execute("DELETE FROM trip_drives WHERE trip_id=? AND drive_id=?", (trip_id, drive_id))
+
+    def route_segments(self, vehicle_id: str, trip_id: str | None = None, drive_ids: list[str] | None = None) -> list[dict[str, Any]]:
+        drives = self.list_drives(vehicle_id, trip_id)
+        if drive_ids is not None:
+            allowed = set(drive_ids)
+            drives = [drive for drive in drives if drive["id"] in allowed]
+        return [{"drive_id": drive["id"], "started_at": drive["started_at"], "ended_at": drive["ended_at"], "source": drive["source"], "points": []} for drive in drives]
+
+    def assign_interruption(self, trip_id: str, interruption_id: str, status: str, stop_id: str | None = None) -> None:
+        if status not in {"assigned", "dismissed", "pending"}:
+            raise ValueError("interruption_status_invalid")
+        with self._lock, self.connection:
+            self.connection.execute("INSERT INTO interruption_links(trip_id,interruption_id,status,stop_id,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(trip_id,interruption_id) DO UPDATE SET status=excluded.status,stop_id=excluded.stop_id,updated_at=excluded.updated_at", (trip_id, interruption_id, status, stop_id, _now()))
 
     def list_related(self, vehicle_id: str, trip_id: str | None = None) -> dict[str, list[dict[str, Any]]]:
         where = "vehicle_id=?" + (" AND trip_id=?" if trip_id else "")

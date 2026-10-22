@@ -45,17 +45,17 @@ weder automatisch gesucht noch geöffnet.
 
 ## Noch offene Parität
 
-Die Suite deckt jetzt 19 authentifizierte Journal-WebSocket-Kommandos ab,
-einschließlich Fahrzeugliste, Diagnostik, Trip-Übergänge, Stopps, Kosten,
-GPX, PDF, Vorschläge, Übernachtungen und Bewertungen. Gegenüber den 28
-Kommandos der Stable-Integration bleiben `route`, `link_drives`,
-`unlink_drive`, `create_manual_drive`, `update_manual_drive`,
-`delete_manual_drive`, `create_stop_from_interruption`, `assign_interruption`
-und die separaten Stable-Kommandos `update_stop`, `delete_stop`,
-`update_expense`, `delete_expense`, `update_overnight`, `update_rating`
-offen; die Suite hat für einige davon nur Store-/Service-Grundlagen oder
-bewusst keinen entsprechenden Datenbestand. Diese Lücke ist ein NO-GO für
-vollständige Stable-Parität.
+Die Suite deckt jetzt 32 authentifizierte Journal-WebSocket-Kommandos ab,
+einschließlich Fahrzeugliste, Diagnostik, Trips, Routen-Segmente, manuelle
+Fahrten, Stopps, Kosten, GPX, PDF, Vorschläge, Übernachtungen und Bewertungen.
+Die Stable-Integration registriert 28 Kommandos; die Suite verwendet für
+Vorschläge und Übernachtungen teilweise bewusst sprechendere Namen
+(`list_suggestions`/`generate_suggestions`/`accept_suggestion` sowie
+`upsert_overnight`/`upsert_rating`) statt der historischen Stable-Namen.
+Einzelne Stable-Felder und Antwortformate, insbesondere die vollständige
+GPS-Fahrterkennung und alle historischen Detail-Editoren, sind noch nicht
+vollständig gleichwertig abgebildet. Diese Lücke ist ein NO-GO für vollständige
+Stable-Parität.
 
 Der PDF-Export ist ein dependency-freier, mehrseitiger Suite-Bericht mit den
 wesentlichen Journal-Daten; er übernimmt noch nicht jedes historische

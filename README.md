@@ -28,11 +28,11 @@ database, use real credentials, perform live API calls in tests, or install
 anything in Home Assistant VM 104.
 
 Das `route_planner`-Modul verwendet die zentralen Fahrzeugprofile und bietet
-explizite, offline testbare Routenberechnung, sichtbare Beta-/Restriktions- und
-Mautwarnungen sowie GPX Route/Track/Combined. Nakordoni-Motorhome-Routing wird
-nicht als rechtlich validierte Navigation dargestellt; automatische
-Hintergrundberechnung ist absichtlich deaktiviert. Details und die vollständige
-Stable-v0.1.0-Matrix stehen in
+explizite Routenberechnung, interaktive Start-/Ziel-/Zwischenstoppbearbeitung,
+sichtbare Beta-/Restriktions- und Mautwarnungen sowie GPX Route/Track/Combined-
+Downloads. Nakordoni-Motorhome-Routing wird nicht als rechtlich validierte
+Navigation dargestellt; automatische Hintergrundberechnung ist absichtlich
+deaktiviert. Details stehen in
 [docs/phase-2c-route-planner-plan.md](docs/phase-2c-route-planner-plan.md).
 
 ## Module

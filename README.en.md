@@ -26,10 +26,10 @@ use real credentials, perform live API calls in tests, or install anything in
 Home Assistant VM 104.
 
 The `route_planner` module uses the shared vehicle profiles and provides
-explicit, offline-testable route calculation, visible beta/restriction/toll
-warnings, and GPX route/track/combined export. Nakordoni motorhome routing is
-not presented as legally validated navigation; automatic background routing is
-intentionally disabled. The complete Stable v0.1.0 feature matrix is in
+explicit route calculation, interactive start/destination/waypoint editing,
+visible beta/restriction/toll warnings, and GPX route/track/combined downloads.
+Nakordoni motorhome routing is not presented as legally validated navigation;
+automatic background routing is intentionally disabled. Details are in
 [docs/phase-2c-route-planner-plan.md](docs/phase-2c-route-planner-plan.md).
 
 The QA report and current merge gates are documented in

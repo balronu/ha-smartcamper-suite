@@ -118,6 +118,7 @@ class RoutePlannerSensor(SensorEntity):
         result = self._runtime.route.results.get(self._vehicle_id)
         if result is None:
             return {"vehicle_id": self._vehicle_id, "state": "idle", "warnings": []}
+        request = self._runtime.route.requests.get(self._vehicle_id)
         return {
             "vehicle_id": self._vehicle_id,
             "state": "ready",
@@ -127,4 +128,9 @@ class RoutePlannerSensor(SensorEntity):
             "warnings": [warning.message for warning in result.warnings],
             "metadata": result.metadata,
             "beta": bool(result.metadata.get("beta")),
+            "route_input": {
+                "origin": request.origin.as_dict(),
+                "destination": request.destination.as_dict(),
+                "via": [point.as_dict() for point in request.via],
+            } if request else None,
         }

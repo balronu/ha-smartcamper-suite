@@ -46,7 +46,13 @@ export type RouteView = {
   geometry?: Array<{ latitude: number; longitude: number }>;
   warnings?: string[];
   beta?: boolean;
+  origin?: RoutePoint;
+  destination?: RoutePoint;
+  via?: RoutePoint[];
+  route_input?: { origin?: RoutePoint; destination?: RoutePoint; via?: RoutePoint[] };
 };
+
+export type RoutePoint = { latitude: number; longitude: number; label?: string };
 
 export type FuelStationView = {
   station_id: string;
@@ -151,6 +157,36 @@ export function renderRouteHtml(route: RouteView | undefined, config: CardConfig
     ? `<svg class="route-map" viewBox="0 0 320 120" role="img" aria-label="Routenverlauf"><polyline points="${points.map((point, index) => `${(index / (points.length - 1)) * 300 + 10},${110 - (index % 2) * 45}`).join(" ")}" fill="none" stroke="var(--primary-color,#03a9f4)" stroke-width="5" stroke-linecap="round" /></svg>`
     : "";
   return `${map}<p class="route-summary"><strong>${distance}</strong> · ${duration} · ${escapeHtml(route.provider ?? "unbekannt")}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
+}
+
+export function buildNavigationLink(origin: RoutePoint | undefined, destination: RoutePoint | undefined): string | null {
+  if (!destination || !Number.isFinite(destination.latitude) || !Number.isFinite(destination.longitude)) return null;
+  const to = `${destination.latitude},${destination.longitude}`;
+  const from = origin && Number.isFinite(origin.latitude) && Number.isFinite(origin.longitude) ? `${origin.latitude},${origin.longitude}` : "";
+  if (typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent)) return `maps://?daddr=${encodeURIComponent(to)}${from ? `&saddr=${encodeURIComponent(from)}` : ""}`;
+  if (typeof navigator !== "undefined" && /Android/.test(navigator.userAgent)) return `geo:${encodeURIComponent(to)}?q=${encodeURIComponent(to)}`;
+  return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${encodeURIComponent(`${from ? `${from};` : ""}${to}`)}`;
+}
+
+export function buildGpx(route: RouteView, origin: RoutePoint, destination: RoutePoint, via: RoutePoint[], mode: "route" | "track" | "combined"): string {
+  const point = (value: RoutePoint, tag: string): string => `<${tag} lat="${value.latitude}" lon="${value.longitude}" />`;
+  const routePoints = [origin, ...via, destination];
+  const routeXml = `<rte>${routePoints.map((value) => point(value, "rtept")).join("")}</rte>`;
+  const geometry = route.geometry ?? [];
+  const trackXml = `<trk><trkseg>${geometry.map((value) => point(value, "trkpt")).join("")}</trkseg></trk>`;
+  const body = mode === "route" ? routeXml : mode === "track" ? trackXml : `${routeXml}${trackXml}`;
+  return `<?xml version="1.0" encoding="UTF-8"?><gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="SmartCamper Suite"><metadata><name>SmartCamper Route</name></metadata>${body}</gpx>`;
+}
+
+export function downloadGpx(route: RouteView, origin: RoutePoint, destination: RoutePoint, via: RoutePoint[], mode: "route" | "track" | "combined"): void {
+  const blob = new Blob([buildGpx(route, origin, destination, via, mode)], { type: "application/gpx+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `smartcamper-route-${mode}.gpx`;
+  anchor.rel = "noopener";
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 const MODULES = new Set(["travel_journal", "fuel_stations", "route_planner", "border_forecast"]);

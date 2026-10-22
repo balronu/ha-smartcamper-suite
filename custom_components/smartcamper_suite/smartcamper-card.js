@@ -76,6 +76,33 @@ function renderRouteHtml(route, config) {
   const map = points.length > 1 ? `<svg class="route-map" viewBox="0 0 320 120" role="img" aria-label="Routenverlauf"><polyline points="${points.map((point, index) => `${index / (points.length - 1) * 300 + 10},${110 - index % 2 * 45}`).join(" ")}" fill="none" stroke="var(--primary-color,#03a9f4)" stroke-width="5" stroke-linecap="round" /></svg>` : "";
   return `${map}<p class="route-summary"><strong>${distance}</strong> \xB7 ${duration} \xB7 ${escapeHtml(route.provider ?? "unbekannt")}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
 }
+function buildNavigationLink(origin, destination) {
+  if (!destination || !Number.isFinite(destination.latitude) || !Number.isFinite(destination.longitude)) return null;
+  const to = `${destination.latitude},${destination.longitude}`;
+  const from = origin && Number.isFinite(origin.latitude) && Number.isFinite(origin.longitude) ? `${origin.latitude},${origin.longitude}` : "";
+  if (typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent)) return `maps://?daddr=${encodeURIComponent(to)}${from ? `&saddr=${encodeURIComponent(from)}` : ""}`;
+  if (typeof navigator !== "undefined" && /Android/.test(navigator.userAgent)) return `geo:${encodeURIComponent(to)}?q=${encodeURIComponent(to)}`;
+  return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${encodeURIComponent(`${from ? `${from};` : ""}${to}`)}`;
+}
+function buildGpx(route, origin, destination, via, mode) {
+  const point = (value, tag) => `<${tag} lat="${value.latitude}" lon="${value.longitude}" />`;
+  const routePoints = [origin, ...via, destination];
+  const routeXml = `<rte>${routePoints.map((value) => point(value, "rtept")).join("")}</rte>`;
+  const geometry = route.geometry ?? [];
+  const trackXml = `<trk><trkseg>${geometry.map((value) => point(value, "trkpt")).join("")}</trkseg></trk>`;
+  const body = mode === "route" ? routeXml : mode === "track" ? trackXml : `${routeXml}${trackXml}`;
+  return `<?xml version="1.0" encoding="UTF-8"?><gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="SmartCamper Suite"><metadata><name>SmartCamper Route</name></metadata>${body}</gpx>`;
+}
+function downloadGpx(route, origin, destination, via, mode) {
+  const blob = new Blob([buildGpx(route, origin, destination, via, mode)], { type: "application/gpx+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `smartcamper-route-${mode}.gpx`;
+  anchor.rel = "noopener";
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 var MODULES = /* @__PURE__ */ new Set(["travel_journal", "fuel_stations", "route_planner", "border_forecast"]);
 function validateConfig(config) {
   if (!MODULES.has(config.module)) throw new Error("Unknown SmartCamper module");
@@ -86,6 +113,7 @@ function validateConfig(config) {
 var SmartCamperCard = class extends HTMLElement {
   config = { type: "custom:smartcamper-card", module: "travel_journal" };
   _hass;
+  routeVia = [];
   setConfig(raw) {
     this.config = validateConfig(raw);
     this.render();
@@ -163,10 +191,28 @@ var SmartCamperCard = class extends HTMLElement {
       const vehicleId2 = selectVehicle(this.config, states2);
       const sensor2 = Object.values(states2).find((state) => state.attributes?.vehicle_id === vehicleId2 && state.attributes?.beta !== void 0);
       const route = sensor2?.attributes;
-      const calculate = this.config.origin && this.config.destination && vehicleId2 ? `<button class="route-calculate" type="button">Route berechnen</button>` : "";
-      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-calculate{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId2 ?? "Kein Fahrzeug ausgew\xE4hlt"}</small></header>${renderRouteHtml(route, this.config)}${calculate}</article>`;
+      const origin = route?.origin ?? route?.route_input?.origin ?? this.config.origin;
+      const destination = route?.destination ?? route?.route_input?.destination ?? this.config.destination;
+      const via = route?.via ?? route?.route_input?.via ?? this.routeVia;
+      const calculate = origin && destination && vehicleId2 ? `<button class="route-calculate" type="button">Route berechnen</button>` : "";
+      const pointEditor = (point, label, index) => point ? `<span class="route-point" data-index="${index ?? ""}"><b>${label}</b> ${point.latitude}, ${point.longitude}${index == null ? "" : ` <button class="route-remove" type="button" data-index="${index}" aria-label="Zwischenstopp entfernen">\xD7</button>`}</span>` : `<span class="route-point missing"><b>${label}</b> nicht gesetzt</span>`;
+      const navigation = buildNavigationLink(origin, destination);
+      const exportButtons = route?.state === "ready" && origin && destination ? `<div class="route-actions"><button class="route-gpx" data-mode="route" type="button">GPX-Route</button><button class="route-gpx" data-mode="track" type="button">GPX-Track</button><button class="route-gpx" data-mode="combined" type="button">GPX kombiniert</button>${navigation ? `<a class="route-navigation" href="${navigation}" target="_blank" rel="noopener">Im Navi \xF6ffnen</a>` : ""}</div>` : "";
+      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-calculate,.route-gpx,.route-actions a{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId2 ?? "Kein Fahrzeug ausgew\xE4hlt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzuf\xFCgen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
+      this.querySelector(".route-add")?.addEventListener("click", () => {
+        this.routeVia = [...via, { latitude: origin?.latitude ?? 0, longitude: origin?.longitude ?? 0 }];
+        this.render();
+      });
+      this.querySelectorAll(".route-remove").forEach((button) => button.addEventListener("click", () => {
+        const removeIndex = Number(button.dataset.index);
+        this.routeVia = via.filter((_point, index) => index !== removeIndex);
+        this.render();
+      }));
+      this.querySelectorAll(".route-gpx").forEach((button) => button.addEventListener("click", () => {
+        if (route && origin && destination) downloadGpx(route, origin, destination, via, button.dataset.mode);
+      }));
       this.querySelector(".route-calculate")?.addEventListener("click", () => {
-        if (vehicleId2 && this.config.origin && this.config.destination && this._hass?.callService) void this._hass.callService("smartcamper_suite", "calculate_route", { vehicle_id: vehicleId2, origin: this.config.origin, destination: this.config.destination, via: this.config.via ?? [] });
+        if (vehicleId2 && origin && destination && this._hass?.callService) void this._hass.callService("smartcamper_suite", "calculate_route", { vehicle_id: vehicleId2, origin, destination, via });
       });
       return;
     }

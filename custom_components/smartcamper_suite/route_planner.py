@@ -176,7 +176,7 @@ class NakordoniMotorhomeProvider:
             raise RouteError("Das Routing hat das Zeitlimit überschritten.", "timeout", retryable=True) from err
         except OSError as err:
             raise RouteError("Der Routinganbieter ist nicht erreichbar.", "network_error", retryable=True) from err
-        if payload.get("ok") is not True:
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
             raise _provider_error(payload)
         try:
             data = payload["data"]
@@ -274,6 +274,7 @@ class RoutePlannerRuntime:
     def __init__(self, vehicles: dict[str, Vehicle], credential: str | None = None, transport: Transport | None = None) -> None:
         self.vehicles = vehicles
         self.results: dict[str, RouteResult] = {}
+        self.requests: dict[str, RouteRequest] = {}
         self.coordinator = RouteCoordinator(NakordoniMotorhomeProvider(credential, transport))
 
     async def async_calculate(self, data: dict[str, Any]) -> RouteResult:
@@ -285,5 +286,6 @@ class RoutePlannerRuntime:
             tuple(_point(item) for item in data.get("via", [])), int(data.get("alternatives", 0)), str(data.get("traffic", "off")),
         )
         result = await self.coordinator.async_calculate(request, vehicle)
+        self.requests[vehicle.vehicle_id] = request
         self.results[vehicle.vehicle_id] = result
         return result

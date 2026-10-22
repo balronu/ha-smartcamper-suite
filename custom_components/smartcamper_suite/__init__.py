@@ -21,7 +21,7 @@ from .models import Vehicle
 from .modules import ModuleManager
 from .oauth2 import async_register as async_register_oauth
 from .providers import ProviderRegistry
-from .route_planner import RoutePlannerRuntime
+from .route_planner import ROUTE_ENDPOINT, RoutePlannerRuntime
 from .storage import SuiteStore
 
 PLATFORMS: list[str] = ["sensor"]
@@ -131,7 +131,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         credential_id = account.get("credential_id")
         if isinstance(credential_id, str):
             nakordoni_credential = credentials.get_secret(credential_id)
-    route = RoutePlannerRuntime(vehicles, nakordoni_credential)
+    async def route_transport(parameters: dict[str, Any]) -> dict[str, Any]:
+        """Use the suite-owned HA transport only for an explicit route action."""
+        response = await transport(
+            "nakordoni", ROUTE_ENDPOINT,
+            {key: str(value) for key, value in parameters.items() if value != ""},
+            {"Authorization": f"Bearer {nakordoni_credential}"} if nakordoni_credential else {},
+        )
+        payload = response.payload
+        if not isinstance(payload, dict):
+            raise TypeError("Nakordoni returned a non-object response")
+        return {**payload, "status": response.status, "headers": response.headers}
+
+    route = RoutePlannerRuntime(vehicles, nakordoni_credential, route_transport)
     runtime = SuiteRuntime(
         providers, credentials, ApiClient(), ModuleManager(entry.options.get("modules")), store, fuel, route
     )

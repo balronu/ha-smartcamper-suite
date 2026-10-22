@@ -85,6 +85,15 @@ try {
   assert.equal(await page.locator("#first .route-map").count(), 1);
   assert.match(await page.locator("#first").innerText(), /123\.5 km/);
   assert.match(await page.locator("#first").innerText(), /Beta/);
+  assert.equal(await page.locator("#first .route-navigation").count(), 1);
+  await page.locator("#first .route-add").click();
+  assert.equal(await page.locator("#first .route-remove").count(), 1);
+  await page.locator("#first .route-remove").click();
+  const download = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#first .route-gpx[data-mode=combined]").click(),
+  ]);
+  assert.match(download[0].suggestedFilename(), /smartcamper-route-combined\.gpx/);
   await page.locator("#first .route-calculate").click();
   assert.deepEqual(calls.at(-1), ["smartcamper_suite", "calculate_route", { vehicle_id: "womo", origin: { latitude: 50, longitude: 8 }, destination: { latitude: 51, longitude: 9 }, via: [] }]);
   console.log("browser card assertions: PASS");

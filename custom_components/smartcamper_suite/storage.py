@@ -13,7 +13,12 @@ class SuiteStore:
     """Versioned, isolated SQLite store. Phase 2A never opens legacy databases."""
 
     def __init__(self, path: str | Path = ":memory:") -> None:
-        self.connection = sqlite3.connect(path)
+        # The integration creates/closes the store in HA's executor.  Keeping
+        # the connection usable from the small synchronous repository methods
+        # also lets callers explicitly place those methods in an executor.
+        if path != ":memory:":
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.connection = sqlite3.connect(path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.execute("PRAGMA busy_timeout = 5000")
@@ -44,3 +49,6 @@ class SuiteStore:
 
     def snapshot(self) -> dict[str, Any]:
         return {"schema_version": STORAGE_VERSION, "vehicles": [copy.deepcopy(v.to_dict()) for v in self.list_vehicles(True)]}
+
+    def close(self) -> None:
+        self.connection.close()

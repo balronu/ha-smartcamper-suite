@@ -9,12 +9,34 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.13'}
-      - run: python -m pip install pytest ruff
-      - run: python -m pytest
+      - run: python -m pip install pytest ruff 'homeassistant==2025.12.5'
+      - run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. python -m pytest
       - run: ruff check .
       - run: python -m compileall -q custom_components tests
       - run: python -m json.tool custom_components/smartcamper_suite/manifest.json >/dev/null
       - run: python -m json.tool hacs.json >/dev/null
+      - run: git diff --check
+  home-assistant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.14.2'}
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install 'homeassistant==2026.10.1' 'pytest>=8.3,<9'
+      - run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. python -m pytest -q
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   frontend:
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: frontend}}

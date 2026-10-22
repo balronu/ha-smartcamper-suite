@@ -11,3 +11,6 @@ foundation for `custom:smartcamper-card`.
 No legacy database is opened or migrated, no live API is called, no productive
 vehicle is created, and nothing is installed in Home Assistant VM 104 in this
 phase.
+
+The QA report and current merge gates are documented in
+[docs/phase-2a-qa.md](docs/phase-2a-qa.md).

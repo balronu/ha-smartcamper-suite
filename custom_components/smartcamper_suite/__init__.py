@@ -31,8 +31,12 @@ class SuiteRuntime:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_register_frontend(hass)
-    runtime = SuiteRuntime(ProviderRegistry(), CredentialStore(), ApiClient(), ModuleManager(entry.options.get("modules")))
-    runtime.store = SuiteStore(hass.config.path(".storage", "smartcamper_suite.sqlite"))
+    store = await hass.async_add_executor_job(
+        SuiteStore, hass.config.path(".storage", "smartcamper_suite.sqlite")
+    )
+    runtime = SuiteRuntime(
+        ProviderRegistry(), CredentialStore(), ApiClient(), ModuleManager(entry.options.get("modules")), store
+    )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
     await runtime.modules.async_setup(runtime)
     return True
@@ -41,6 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime: SuiteRuntime = hass.data[DOMAIN].pop(entry.entry_id)
     await runtime.modules.async_unload()
-    if not hass.data[DOMAIN]:
+    await hass.async_add_executor_job(runtime.store.close)
+    if not any(key != "_frontend" for key in hass.data[DOMAIN]):
         await async_unregister_frontend(hass)
     return True

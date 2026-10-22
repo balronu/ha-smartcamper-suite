@@ -30,3 +30,5 @@ cd frontend && npm ci && npm test && npm run build
 
 See [README.en.md](README.en.md), [docs/architecture.md](docs/architecture.md)
 and [docs/development.md](docs/development.md).
+The QA status and remaining merge gates are in
+[docs/phase-2a-qa.md](docs/phase-2a-qa.md).

@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 DOMAIN = "smartcamper_suite"
-VERSION = "0.3.0-beta.1"
+VERSION = "0.3.0-beta.2"
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}.storage"
 CONF_VEHICLES = "vehicles"

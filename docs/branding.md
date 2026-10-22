@@ -35,3 +35,19 @@ behauptet.
 
 Die Bildfreigabe des Projektinhabers ist dokumentiert; eine separate
 markenrechtliche Prüfung der abgebildeten Wort-/Bildmarken ersetzt sie nicht.
+
+## Prüfstand für Beta 0.3.0-beta.2
+
+- Die GitHub-README verwendet ausschließlich relative, case-sensitive Pfade
+  auf `docs/assets/` und `docs/images/`; die referenzierten Dateien werden im
+  Repository und im HACS-Archiv geprüft.
+- Die vier UI-Screenshots unter `docs/images/` stammen aus dem isolierten
+  Chromium-Fixture mit synthetischen Home-Assistant-Daten. Für die zentrale
+  Fahrzeugverwaltung existiert noch kein vollständiger HA-UI-Fixture; dafür
+  wird kein Bild behauptet.
+- Das HACS-Archiv enthält die lokalen `brand/`-Dateien. HACS-Kataloganzeige,
+  lokale HA-Brandingauslieferung und die öffentliche
+  `brands.home-assistant.io`-CDN sind getrennte Pfade.
+- Eine offizielle CDN-Verfügbarkeit oder ein offizieller Brands-Merge wurde
+  nicht behauptet. Nach Update ist ein HA-Neustart und ein harter Browser-
+  Refresh erforderlich, bevor lokale Brandingdateien bewertet werden können.

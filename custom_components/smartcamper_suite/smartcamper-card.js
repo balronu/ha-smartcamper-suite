@@ -31,31 +31,32 @@ function buildNavigationUrl(latitude, longitude, provider = "auto", label = "Tan
   if (provider === "waze") return `https://waze.com/ul?ll=${encodeURIComponent(destination)}&navigate=yes`;
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&destination_place_id=${encodeURIComponent(label)}`;
 }
-function prioritizeStations(stations, sortMode = "distance") {
+function prioritizeStations(stations, sortMode = "distance", sortFuel) {
   return [...stations].sort((left, right) => {
-    const leftValue = sortMode === "price" ? left.price : left.distance_km;
-    const rightValue = sortMode === "price" ? right.price : right.distance_km;
+    const leftValue = sortMode === "price" ? sortFuel ? left.fuel_prices?.[sortFuel] ?? left.price : left.price : left.distance_km;
+    const rightValue = sortMode === "price" ? sortFuel ? right.fuel_prices?.[sortFuel] ?? right.price : right.price : right.distance_km;
     return (leftValue ?? Number.POSITIVE_INFINITY) - (rightValue ?? Number.POSITIVE_INFINITY) || String(left.station_id).localeCompare(String(right.station_id));
   });
 }
 function renderFuelStationsHtml(stations, config) {
   const mode = config.display_mode ?? "detailed";
   if (!stations.length) return `<p class="fuel-empty">Keine Tankstellen verf\xFCgbar</p>`;
-  const sorted = prioritizeStations(stations, config.sort_mode);
+  const sorted = prioritizeStations(stations, config.sort_mode, config.sort_fuel);
   const visible = Number.isInteger(config.visible_station_count) && (config.visible_station_count ?? 0) > 0 ? sorted.slice(0, config.visible_station_count) : sorted;
   const highlightIds = config.custom_layout === "highlights_list" ? new Set(sorted.slice(0, 2).map((station) => station.station_id)) : /* @__PURE__ */ new Set();
   const renderStation = (station, highlight = false) => {
-    const prices = station.fuel_prices ? Object.entries(station.fuel_prices).map(([fuel, value]) => `${fuel.toUpperCase()}: ${value == null ? "\u2013" : `${value.toFixed(3)} \u20AC`}`).join(" \xB7 ") : station.price == null ? "\u2013" : `${station.price.toFixed(3)} \u20AC`;
+    const prices = station.fuel_prices ? Object.entries(station.fuel_prices).map(([fuel, value]) => `${config.show_fuel_labels === false ? "" : `${fuel.toUpperCase()}: `}${value == null ? "\u2013" : `${value.toFixed(3)} \u20AC`}`).join(" \xB7 ") : station.price == null ? "\u2013" : `${station.price.toFixed(3)} \u20AC`;
     const price = config.show_prices === false ? "" : `<b class="prices">${prices}</b>`;
     const distance = config.show_distance === false ? "" : `<em>${station.distance_km == null ? "\u2013" : `${station.distance_km.toFixed(1)} km`}</em>`;
     const address = config.show_address === false ? "" : `<small>${escapeHtml(station.address ?? "")}</small>`;
     const status = config.show_status === false ? "" : `<span>${station.is_open === false ? "Geschlossen" : "Offen/unbekannt"}</span>`;
+    const provider = config.show_provider_row === false || !station.provider ? "" : `<span>${escapeHtml(station.provider)}</span>`;
     const logoUrl = config.show_brand_logos !== false ? buildBrandLogoUrl(station.brand, config.logo_path) : null;
     const logo = logoUrl ? `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(station.brand ?? "")} Logo" />` : `<span class="brand-logo-fallback" aria-hidden="true">\u26FD</span>`;
     const navigation = config.navigation !== false ? buildNavigationUrl(station.latitude, station.longitude, config.navigation_provider, station.name) : null;
     const navigate = navigation ? `<a class="navigate" href="${escapeHtml(navigation)}" target="_blank" rel="noopener noreferrer" aria-label="Navigieren">\u2197</a>` : "";
     const badge = config.show_badges !== false && highlight ? `<span class="badge">Highlight</span>` : "";
-    return `<li class="fuel-station ${mode}${highlight ? " highlight" : ""}" data-station-id="${escapeHtml(station.station_id)}">${logo}<div class="station-main"><strong>${escapeHtml(station.name)}</strong>${badge}${address}<div class="meta">${status}${distance}</div></div>${price}${navigate}</li>`;
+    return `<li class="fuel-station ${mode}${highlight ? " highlight" : ""}" data-station-id="${escapeHtml(station.station_id)}">${logo}<div class="station-main">${config.show_name === false ? "" : `<strong>${escapeHtml(station.name)}</strong>`}${badge}${address}<div class="meta">${status}${distance}${provider}</div></div>${price}${navigate}</li>`;
   };
   const highlights = config.custom_layout === "highlights_list" ? sorted.slice(0, 2).map((station) => renderStation(station, true)).join("") : "";
   const remaining = config.custom_layout === "highlights_list" ? visible.filter((station) => !highlightIds.has(station.station_id)) : visible;
@@ -104,6 +105,7 @@ var SmartCamperCard = class extends HTMLElement {
       <label>Navigation <select data-field="navigation_provider"><option value="auto">Automatisch</option><option value="apple">Apple</option><option value="google">Google</option><option value="waze">Waze</option></select></label>
       <label>Abrufmodus <select data-field="fetch_mode"><option value="automatic">Automatisch</option><option value="manual">Manuell</option></select></label>
       <label><input data-field="show_prices" type="checkbox" checked /> Preise</label>
+      <label><input data-field="show_name" type="checkbox" checked /> Tankstellenname</label>
       <label><input data-field="show_distance" type="checkbox" checked /> Entfernung</label>
       <label><input data-field="show_address" type="checkbox" checked /> Adresse</label>
       <label><input data-field="show_status" type="checkbox" checked /> Status</label>
@@ -123,7 +125,7 @@ var SmartCamperCard = class extends HTMLElement {
       editor.dispatchEvent(new CustomEvent("config-changed", {
         bubbles: true,
         composed: true,
-        detail: { config: { ...this.config, module, vehicle_id, display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } }
+        detail: { config: { ...this.config, module, vehicle_id, display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } }
       }));
     };
     editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", emit));
@@ -147,12 +149,26 @@ var SmartCamperCard = class extends HTMLElement {
     const status = sensor?.attributes?.state;
     const stations = this.mergeStations(sensor?.attributes?.stations ?? []);
     const stationHtml = renderFuelStateHtml(status, stations, this.config);
+    const radius = sensor?.attributes?.radius_km;
+    const fuelTypes = Array.isArray(sensor?.attributes?.fuel_types) ? sensor.attributes.fuel_types.join(", ") : "";
+    const provider = sensor?.attributes?.provider;
+    const fetchMode = sensor?.attributes?.fetch_mode ?? this.config.fetch_mode;
     const usage = sensor?.attributes?.provider_usage;
-    const usageText = usage ? Object.entries(usage).map(([provider, value]) => `${provider}: ${value.quotas?.cheap?.remaining ?? "?"} verbleibend`).join(" \xB7 ") : "";
+    const usageText = usage ? Object.entries(usage).map(([provider2, value]) => `${provider2}: ${value.quotas?.cheap?.remaining ?? "?"} verbleibend`).join(" \xB7 ") : "";
     const diagnostics = this.config.show_diagnostics !== false && (sensor?.attributes?.error || usageText) ? `<p class="diagnostics" role="status">${sensor?.attributes?.error ? `Providerfehler: ${String(sensor.attributes.error)}` : ""}${usageText ? ` ${usageText}` : ""}</p>` : "";
     const lastUpdated = this.config.show_last_updated !== false && sensor?.attributes?.updated_at ? `<small class="updated">Stand: ${String(sensor.attributes.updated_at)}</small>` : "";
-    const refresh = this.config.show_refresh !== false && this.config.fetch_mode === "manual" ? `<button class="refresh" type="button">Jetzt aktualisieren</button>` : "";
-    this.innerHTML = `<style>.fuel-card{font-family:var(--primary-font-family, sans-serif);color:var(--primary-text-color,#263238);background:var(--ha-card-background,var(--card-background-color,#fff));padding:12px;border-radius:12px}.fuel-card header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.fuel-card header strong{font-size:1.1rem}.fuel-card header small,.updated{opacity:.72}.fuel-card header small{margin-right:auto}.stations{list-style:none;margin:0;padding:0;display:grid;gap:8px}.fuel-station{display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px;border-bottom:1px solid var(--divider-color,#ddd)}.fuel-station.compact{padding:4px}.fuel-station.individual{border:1px solid var(--divider-color,#ddd);border-radius:8px}.fuel-station.highlight{background:color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent)}.brand-logo{width:32px;height:32px;object-fit:contain}.brand-logo-fallback{font-size:1.4rem}.station-main{min-width:0;display:grid;gap:2px}.station-main small,.meta{font-size:.85em;opacity:.78}.meta{display:flex;gap:8px}.prices{white-space:nowrap}.navigate{font-size:1.35rem;text-decoration:none}.highlights{display:grid;gap:8px;margin-bottom:8px}.badge{margin-left:6px;font-size:.75em;color:var(--primary-color,#03a9f4)}.diagnostics{font-size:.85em;opacity:.8}.refresh{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:4px 10px}@media(max-width:500px){.fuel-station{grid-template-columns:30px minmax(0,1fr) auto}.fuel-station .prices{grid-column:2}.fuel-station .navigate{grid-column:3;grid-row:1 / span 2}}</style><article class="fuel-card"><header>${this.config.show_title === false ? "" : "<strong>Tankstellen</strong>"}<small>${vehicleId ?? "Kein Fahrzeug ausgew\xE4hlt"}</small>${lastUpdated}${refresh}</header>${diagnostics}<div>${stationHtml}</div></article>`;
+    const refresh = this.config.show_refresh !== false && fetchMode === "manual" ? `<button class="refresh" type="button">Jetzt aktualisieren</button>` : "";
+    const headerDetails = [
+      this.config.show_station_count === false ? "" : `${stations.length} Tankstellen`,
+      this.config.show_radius === false || radius == null ? "" : `${radius} km`,
+      this.config.show_fuel_type === false || !fuelTypes ? "" : fuelTypes,
+      this.config.show_provider === false || !provider ? "" : `Quelle: ${provider}`,
+      this.config.show_fetch_mode === false || !fetchMode ? "" : `Abruf: ${fetchMode}`
+    ].filter(Boolean).join(" \xB7 ");
+    const details = headerDetails ? `<small class="details">${headerDetails}</small>` : "";
+    const dividerClass = this.config.show_dividers === false ? " no-dividers" : "";
+    const densityClass = this.config.density === "compact" ? " dense" : "";
+    this.innerHTML = `<style>.fuel-card{font-family:var(--primary-font-family, sans-serif);color:var(--primary-text-color,#263238);background:var(--ha-card-background,var(--card-background-color,#fff));padding:12px;border-radius:12px}.fuel-card header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.fuel-card header strong{font-size:1.1rem}.fuel-card header small,.updated,.details{opacity:.72}.fuel-card header small{margin-right:auto}.stations{list-style:none;margin:0;padding:0;display:grid;gap:8px}.fuel-station{display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px;border-bottom:1px solid var(--divider-color,#ddd)}.fuel-station.compact{padding:4px}.fuel-station.individual{border:1px solid var(--divider-color,#ddd);border-radius:8px}.fuel-station.highlight{background:color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent)}.fuel-card.no-dividers .fuel-station{border-bottom:0}.fuel-card.dense{padding:6px}.brand-logo{width:32px;height:32px;object-fit:contain}.brand-logo-fallback{font-size:1.4rem}.station-main{min-width:0;display:grid;gap:2px}.station-main small,.meta{font-size:.85em;opacity:.78}.meta{display:flex;gap:8px;flex-wrap:wrap}.prices{white-space:nowrap}.navigate{font-size:1.35rem;text-decoration:none}.highlights{display:grid;gap:8px;margin-bottom:8px}.badge{margin-left:6px;font-size:.75em;color:var(--primary-color,#03a9f4)}.diagnostics{font-size:.85em;opacity:.8}.refresh{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:4px 10px}@media(max-width:500px){.fuel-station{grid-template-columns:30px minmax(0,1fr) auto}.fuel-station .prices{grid-column:2}.fuel-station .navigate{grid-column:3;grid-row:1 / span 2}}</style><article class="fuel-card${dividerClass}${densityClass}"><header>${this.config.show_title === false ? "" : "<strong>Tankstellen</strong>"}<small>${vehicleId ?? "Kein Fahrzeug ausgew\xE4hlt"}</small>${details}${lastUpdated}${refresh}</header>${diagnostics}<div>${stationHtml}</div></article>`;
     this.querySelector(".refresh")?.addEventListener("click", () => {
       if (vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "refresh_fuel_stations", { vehicle_id: vehicleId });
     });

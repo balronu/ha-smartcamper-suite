@@ -2,7 +2,7 @@
 
 [Deutsch](README.md) | [English](README.en.md)
 
-**Öffentliche Test-Beta: `v0.3.0-beta.3` (Hotfix-Kandidat).**
+**Öffentliche Test-Beta: `v0.3.0-beta.4` (Phase-2G-Kandidat).**
 
 Die Stable-Integrationen bleiben die Produktionsreferenz. Diese Beta ist nur
 für einen isolierten, kontrollierten Home-Assistant-Test vorgesehen.
@@ -25,7 +25,7 @@ Karte `custom:smartcamper-card`.
 Die Beta kann über **HACS → Integrationen → Benutzerdefinierte Repositories**
 installiert werden. Repository hinzufügen:
 `https://github.com/balronu/ha-smartcamper-suite`, Typ **Integration**.
-Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.3` installieren,
+Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.4` installieren,
 sobald der Release veröffentlicht ist.
 Nach der Installation Home Assistant neu starten und die Suite unter
 **Einstellungen → Geräte & Dienste** als separaten Config Entry hinzufügen.

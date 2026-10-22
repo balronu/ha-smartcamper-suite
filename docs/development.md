@@ -1,7 +1,7 @@
 # Development notes
 
 The initial Phase-2 implementation branches are historical development
-context. The current public candidate is `v0.3.0-beta.1`; it remains a
+context. The current public candidate is `v0.3.0-beta.4`; it remains a
 controlled test beta, not a Stable release. Tests use isolated storage, fake
 transports and synthetic vehicle data. They must not contain real API keys,
 OAuth tokens, GPS profiles from production, or live provider calls.

@@ -61,6 +61,7 @@ export type JournalView = {
   state?: string;
   trip_count?: number;
   active_trip_count?: number;
+  trips?: Array<{ id: string; title?: string; status?: string }>;
   active_trip?: { id: string; title: string; description?: string; destination?: string; status?: string; start_date?: string; end_date?: string } | null;
   expense_total_minor?: number;
   gps_point_count?: number;

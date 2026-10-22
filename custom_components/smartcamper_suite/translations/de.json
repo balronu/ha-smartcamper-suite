@@ -8,7 +8,7 @@
       "vehicle": {"title": "Fahrzeugdaten", "description": "GPS-Tracker und Kraftstoffe auswählen. Abmessungen sind optional.", "data": {"name": "Fahrzeugname", "tracker_entity_id": "GPS-Tracker", "length_m": "Länge (m)", "width_m": "Breite (m)", "height_m": "Höhe (m)", "weight_t": "Gewicht (t)", "axle_count": "Achsenzahl", "fuel_types": "Unterstützte Kraftstoffe"}},
       "modules": {"title": "Module", "description": "Die gewünschten Suite-Module aktivieren.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
       "common": {"title": "Aktualisierung & allgemeine Einstellungen", "description": "Festlegen, wie oft die Suite Daten aktualisiert.", "data": {"refresh_mode": "Aktualisierungsmodus", "refresh_interval_min": "Aktualisierungsintervall (Minuten)"}}
-    },
-    "selector": {"fuel_types": {"options": {"diesel": "Diesel", "e5": "Benzin E5", "e10": "Benzin E10", "lpg": "LPG", "hvo100": "HVO100"}}}
-  }
+    }
+  },
+  "selector": {"fuel_types": {"options": {"diesel": "Diesel", "e5": "Benzin E5", "e10": "Benzin E10", "lpg": "LPG", "hvo100": "HVO100"}}}
 }

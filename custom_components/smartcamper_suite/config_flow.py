@@ -52,7 +52,10 @@ def _vehicle_schema(current: Vehicle | None = None) -> vol.Schema:
             selector.SelectSelectorConfig(options=[str(value) for value in range(1, 7)], mode=selector.SelectSelectorMode.DROPDOWN)
         ),
         vol.Required("fuel_types", default=current.fuel_types or ["diesel"]): selector.SelectSelector(
-            selector.SelectSelectorConfig(options=list(_FUEL_TYPES), multiple=True, mode=selector.SelectSelectorMode.DROPDOWN)
+            selector.SelectSelectorConfig(
+                options=list(_FUEL_TYPES), multiple=True,
+                mode=selector.SelectSelectorMode.DROPDOWN, translation_key="fuel_types",
+            )
         ),
     }
     numeric_fields = {

@@ -89,6 +89,9 @@ try {
   await page.locator("#first .route-add").click();
   assert.equal(await page.locator("#first .route-remove").count(), 1);
   await page.locator("#first .route-remove").click();
+  await page.locator("#first .route-map").click({ position: { x: 160, y: 60 } });
+  assert.equal(await page.locator("#first .route-remove").count(), 1);
+  await page.locator("#first .route-remove").click();
   const download = await Promise.all([
     page.waitForEvent("download"),
     page.locator("#first .route-gpx[data-mode=combined]").click(),

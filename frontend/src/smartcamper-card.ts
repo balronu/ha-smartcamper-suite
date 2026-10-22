@@ -111,6 +111,21 @@ class SmartCamperCard extends HTMLElement {
         this.routeVia = [...via, { latitude: origin?.latitude ?? 0, longitude: origin?.longitude ?? 0 }];
         this.render();
       });
+      this.querySelector(".route-map")?.addEventListener("click", (event) => {
+        const geometry = route?.geometry ?? [];
+        if (geometry.length < 2) return;
+        const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (event as MouseEvent).clientX - bounds.left) / bounds.width);
+        const y = Math.max(0, Math.min(1, (event as MouseEvent).clientY - bounds.top) / bounds.height);
+        const latitudes = geometry.map((point) => point.latitude);
+        const longitudes = geometry.map((point) => point.longitude);
+        this.routeVia = [...via, {
+          latitude: Math.min(...latitudes) + (1 - y) * (Math.max(...latitudes) - Math.min(...latitudes)),
+          longitude: Math.min(...longitudes) + x * (Math.max(...longitudes) - Math.min(...longitudes)),
+          label: "Karten-Zwischenstopp",
+        }];
+        this.render();
+      });
       this.querySelectorAll<HTMLButtonElement>(".route-remove").forEach((button) => button.addEventListener("click", () => {
         const removeIndex = Number(button.dataset.index);
         this.routeVia = via.filter((_point, index) => index !== removeIndex);

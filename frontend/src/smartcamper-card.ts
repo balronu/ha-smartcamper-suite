@@ -95,8 +95,10 @@ class SmartCamperCard extends HTMLElement {
     return this._hass;
   }
 
-  getConfigElement(): HTMLElement {
+  static getConfigElement(): HTMLElement {
     const editor = document.createElement("div");
+    const baseConfig: CardConfig = { type: "custom:smartcamper-card", module: "fuel_stations" };
+    let currentConfig: CardConfig = { ...baseConfig };
     editor.innerHTML = `
       <label>Modul <select data-field="module">
         <option value="travel_journal">Camper Travel Journal</option>
@@ -120,6 +122,26 @@ class SmartCamperCard extends HTMLElement {
       <label><input data-field="show_brand_logos" type="checkbox" checked /> Anbieterlogos</label>
       <label><input data-field="show_diagnostics" type="checkbox" checked /> Diagnostik</label>
       <label><input data-field="show_refresh" type="checkbox" checked /> Aktualisieren</label>`;
+    const applyConfig = (config: CardConfig): void => {
+      currentConfig = { ...baseConfig, ...config };
+      const setValue = (field: string, value: unknown): void => {
+        const element = editor.querySelector(`[data-field=${field}]`) as HTMLInputElement | HTMLSelectElement | null;
+        if (element && value != null) element.value = String(value);
+      };
+      setValue("module", currentConfig.module);
+      setValue("vehicle_id", currentConfig.vehicle_id);
+      setValue("display_mode", currentConfig.display_mode ?? "detailed");
+      setValue("custom_layout", currentConfig.custom_layout ?? "list");
+      setValue("sort_mode", currentConfig.sort_mode ?? "distance");
+      setValue("visible_station_count", currentConfig.visible_station_count);
+      setValue("navigation_provider", currentConfig.navigation_provider ?? "auto");
+      setValue("fetch_mode", currentConfig.fetch_mode ?? "automatic");
+      for (const field of ["show_prices", "show_name", "show_distance", "show_address", "show_status", "show_brand_logos", "show_diagnostics", "show_refresh"]) {
+        const element = editor.querySelector(`[data-field=${field}]`) as HTMLInputElement | null;
+        if (element && currentConfig[field as keyof CardConfig] != null) element.checked = currentConfig[field as keyof CardConfig] !== false;
+      }
+    };
+    (editor as unknown as HTMLElement & { setConfig: (config: CardConfig) => void }).setConfig = applyConfig;
     const emit = (): void => {
       const module = (editor.querySelector("[data-field=module]") as HTMLSelectElement).value;
       const vehicle_id = (editor.querySelector("[data-field=vehicle_id]") as HTMLInputElement).value || undefined;
@@ -134,15 +156,15 @@ class SmartCamperCard extends HTMLElement {
       };
       const bool = (field: string): boolean => (editor.querySelector(`[data-field=${field}]`) as HTMLInputElement).checked;
       editor.dispatchEvent(new CustomEvent("config-changed", {
-        bubbles: true, composed: true, detail: { config: { ...this.config, module, vehicle_id, origin: parsePoint("origin"), destination: parsePoint("destination"), display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } },
+        bubbles: true, composed: true, detail: { config: { ...currentConfig, module, vehicle_id, origin: parsePoint("origin"), destination: parsePoint("destination"), display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } },
       }));
     };
     editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", emit));
     return editor;
   }
 
-  getStubConfig(): CardConfig {
-    return { type: "custom:smartcamper-card", module: "fuel_stations" };
+  static getStubConfig(): CardConfig {
+    return { module: "fuel_stations" };
   }
 
   getCardSize(): number {

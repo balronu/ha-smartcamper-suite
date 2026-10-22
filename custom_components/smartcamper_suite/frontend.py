@@ -12,6 +12,7 @@ except ImportError:  # Offline domain tests do not install Home Assistant.
 from .const import DOMAIN
 
 RESOURCE_URL = f"/{DOMAIN}/smartcamper-card.js"
+LOGO_URL = f"/{DOMAIN}/logos"
 _FRONTEND_STATE = "_frontend"
 
 
@@ -26,9 +27,15 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         state["active"] = True
         return
     bundle = Path(__file__).with_name("smartcamper-card.js")
-    if not bundle.is_file():
+    logos = Path(__file__).with_name("logos")
+    if not bundle.is_file() or not logos.is_dir():
         return
-    await hass.http.async_register_static_paths([StaticPathConfig(RESOURCE_URL, str(bundle), cache_headers=False)])
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(RESOURCE_URL, str(bundle), cache_headers=False),
+            StaticPathConfig(LOGO_URL, str(logos), cache_headers=True),
+        ]
+    )
     if hasattr(hass, "frontend"):
         hass.frontend.add_extra_js_url(RESOURCE_URL)
     domain_data[_FRONTEND_STATE] = {"active": True}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-labelledby="title desc">
+  <title id="title">Wartezeiten Forecast</title><desc id="desc">Illustration of a border crossing with a vehicle queue.</desc>
+  <rect width="640" height="260" rx="28" fill="#0b2940"/><path d="M0 198h640" stroke="#1c9ca8" stroke-width="24"/><path d="M70 92h500v92H70z" fill="#f4f8fa"/><path d="M70 92h500v32H70z" fill="#168fc1"/><text x="320" y="116" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700" fill="#fff">GRENZE</text><path d="M320 124v60M260 124v60M380 124v60" stroke="#0b2940" stroke-width="8"/>
+  <g fill="#ffb34d"><rect x="90" y="204" width="82" height="34" rx="8"/><rect x="195" y="204" width="82" height="34" rx="8"/><rect x="418" y="204" width="82" height="34" rx="8"/><rect x="523" y="204" width="82" height="34" rx="8"/></g><path d="M315 212h14v26h-14z" fill="#ef6c3b"/><circle cx="320" cy="170" r="16" fill="#ef6c3b"/><path d="M320 157v18M310 167h20" stroke="#fff" stroke-width="4"/>
+</svg>

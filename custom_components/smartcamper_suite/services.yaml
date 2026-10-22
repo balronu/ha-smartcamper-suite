@@ -1,0 +1,54 @@
+set_credential:
+  name: Set provider credential
+  description: Store or replace one shared provider API key for the Suite entry.
+  fields:
+    entry_id:
+      name: Config entry
+      required: true
+      selector:
+        text:
+    credential_id:
+      name: Credential ID
+      required: true
+      selector:
+        text:
+    provider:
+      name: Provider
+      required: true
+      selector:
+        select:
+          options:
+            - tankerkoenig
+            - petromap
+            - nakordoni
+    api_key:
+      name: API key
+      required: true
+      selector:
+        text:
+          type: password
+
+remove_credential:
+  name: Remove provider credential
+  description: Remove one shared provider credential from the Suite runtime.
+  fields:
+    entry_id:
+      name: Config entry
+      required: true
+      selector:
+        text:
+    credential_id:
+      name: Credential ID
+      required: true
+      selector:
+        text:
+
+refresh_fuel_stations:
+  name: Refresh fuel stations
+  description: Refresh one vehicle using its configured GPS tracker and shared provider credentials.
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      required: true
+      selector:
+        text:

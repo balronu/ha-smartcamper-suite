@@ -1,0 +1,5 @@
+[allowlist]
+description = "Nakordoni OAuth client identifier is public application metadata, not a credential."
+regexes = [
+  '''nkd_30ad5daeb089abfc3c1ea20b''',
+]

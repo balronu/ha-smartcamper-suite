@@ -48,7 +48,7 @@ weder automatisch gesucht noch geöffnet.
 Die Suite deckt jetzt 32 authentifizierte Journal-WebSocket-Kommandos ab,
 einschließlich Fahrzeugliste, Diagnostik, Trips, Routen-Segmente, manuelle
 Fahrten, Stopps, Kosten, GPX, PDF, Vorschläge, Übernachtungen und Bewertungen.
-Die Stable-Integration registriert 28 Kommandos; die Suite verwendet für
+Die Stable-Integration registriert 31 Kommandos; die Suite verwendet für
 Vorschläge und Übernachtungen teilweise bewusst sprechendere Namen
 (`list_suggestions`/`generate_suggestions`/`accept_suggestion` sowie
 `upsert_overnight`/`upsert_rating`) statt der historischen Stable-Namen.
@@ -64,3 +64,23 @@ Reverse-Geocoding verwendet einen injizierten gemeinsamen Provider-Resolver;
 die Suite führt keine ungeprüften Live-Endpunkte ein. Historische Spezial-
 Editorflächen der Einzelintegration werden in der gemeinsamen Karte über
 WebSocket- und Service-Verträge abgebildet, nicht als separate Karten kopiert.
+
+## Reproduzierbarer Koexistenztest
+
+Der lokale Test `tests/test_real_coexistence.py` verwendet den offiziellen
+`async_test_home_assistant`-Helper, eine temporäre Konfiguration und die
+read-only Stable-Checkouts. Er initialisiert HTTP, WebSocket und die
+Frontend-URL-Verwaltung, lädt anschließend `mobile_fuel_stations`,
+`camper_route_planner`, `camper_travel_journal` und eine echte Suite-
+Config-Entry. Ausführung:
+
+```text
+SMARTCAMPER_RUN_COEXISTENCE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  ./.venv/bin/python -m pytest -q -rs tests/test_real_coexistence.py
+```
+
+Ergebnis des aktuellen lokalen Laufs: **1 bestanden**. Der Test erzeugt nur
+eine temporäre Suite-Datenbank und verändert keine Legacy-Datei. Der
+`pytest_homeassistant_custom_component`-Pluginpfad bleibt wegen einer
+inkompatiblen Abhängigkeit zu HA 2026.10.1 deaktiviert; der zugrunde liegende
+offizielle Helper wird direkt verwendet.

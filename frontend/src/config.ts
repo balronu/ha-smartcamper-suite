@@ -65,6 +65,9 @@ export type JournalView = {
   expense_total_minor?: number;
   gps_point_count?: number;
   database?: string;
+  drives?: Array<{ id: string; started_at?: string; ended_at?: string; source?: string; manual_distance_km?: number; trip_id?: string | null }>;
+  interruptions?: Array<{ id: string; status?: string }>;
+  suggestions?: Array<{ id: string; status?: string; arrived_at?: string }>;
 };
 
 export function renderJournalHtml(journal: JournalView | undefined, config: CardConfig): string {
@@ -73,7 +76,12 @@ export function renderJournalHtml(journal: JournalView | undefined, config: Card
     ? `<section class="journal-active" data-trip-id="${escapeHtml(journal.active_trip.id)}"><strong>${escapeHtml(journal.active_trip.title)}</strong><small>${escapeHtml(journal.active_trip.destination ?? "Aktive Reise")}</small><div class="journal-trip-actions"><button type="button" class="journal-edit">Reise bearbeiten</button><button type="button" class="journal-complete">Reise beenden</button><button type="button" class="journal-delete">Reise löschen</button></div></section>`
     : `<p class="journal-empty" role="status">Keine aktive Reise.</p>`;
   const diagnostics = config.show_diagnostics === false ? "" : `<small class="journal-meta">${journal.trip_count ?? 0} Reisen · ${(journal.expense_total_minor ?? 0) / 100} € · ${journal.gps_point_count ?? 0} GPS-Punkte</small>`;
-  return `<article class="journal-card"><header><strong>Camper Travel Journal</strong><small>${escapeHtml(journal.vehicle_id)}</small></header>${active}${diagnostics}<div class="journal-actions"><button type="button" class="journal-create">Neue Reise</button>${journal.active_trip ? '<button type="button" class="journal-pdf">PDF exportieren</button>' : ""}<label class="journal-gpx-label">GPX importieren<input type="file" class="journal-gpx" accept=".gpx,application/gpx+xml" /></label></div></article>`;
+  const drives = (journal.drives ?? []).map((drive) => `<li data-drive-id="${escapeHtml(drive.id)}"><span>${escapeHtml(drive.source ?? "Fahrt")} · ${escapeHtml(drive.started_at ?? "")} → ${escapeHtml(drive.ended_at ?? "")}</span><button type="button" class="journal-drive-link" data-drive-id="${escapeHtml(drive.id)}">Mit aktiver Reise verknüpfen</button><button type="button" class="journal-drive-unlink" data-drive-id="${escapeHtml(drive.id)}">Lösen</button><button type="button" class="journal-drive-delete" data-drive-id="${escapeHtml(drive.id)}">Löschen</button></li>`).join("");
+  const suggestions = (journal.suggestions ?? []).map((suggestion) => `<li data-suggestion-id="${escapeHtml(suggestion.id)}">${escapeHtml(suggestion.arrived_at ?? "Vorschlag")} <button type="button" class="journal-suggestion-accept" data-suggestion-id="${escapeHtml(suggestion.id)}">Übernehmen</button><button type="button" class="journal-suggestion-dismiss" data-suggestion-id="${escapeHtml(suggestion.id)}">Ablehnen</button></li>`).join("");
+  const driveSection = `<section class="journal-drives"><h4>Fahrten und Route</h4><form class="journal-drive-form"><input name="occurred_at" type="datetime-local" required aria-label="Fahrtbeginn" /><input name="start_location" placeholder="Start" required /><input name="end_location" placeholder="Ziel" required /><input name="distance_km" type="number" min="0" step="0.1" placeholder="km" required /><button type="submit">Manuelle Fahrt speichern</button></form><ul>${drives || "<li>Keine Fahrten geladen.</li>"}</ul><button type="button" class="journal-route">Routen-Segmente anzeigen</button></section>`;
+  const suggestionSection = `<section class="journal-suggestions"><h4>Aufenthaltsvorschläge</h4><button type="button" class="journal-suggestions-generate">Vorschläge erzeugen</button><ul>${suggestions || "<li>Keine Vorschläge geladen.</li>"}</ul></section>`;
+  const recordSection = `<section class="journal-record-actions"><button type="button" class="journal-stop-create">Stopp hinzufügen</button><button type="button" class="journal-expense-create">Kosten erfassen</button><button type="button" class="journal-diagnostics">Diagnose</button></section>`;
+  return `<article class="journal-card"><header><strong>Camper Travel Journal</strong><small>${escapeHtml(journal.vehicle_id)}</small></header>${active}${diagnostics}${driveSection}${suggestionSection}${recordSection}<div class="journal-actions"><button type="button" class="journal-create">Neue Reise</button>${journal.active_trip ? '<button type="button" class="journal-pdf">PDF exportieren</button>' : ""}<label class="journal-gpx-label">GPX importieren<input type="file" class="journal-gpx" accept=".gpx,application/gpx+xml" /></label></div></article>`;
 }
 
 export type FuelStationView = {

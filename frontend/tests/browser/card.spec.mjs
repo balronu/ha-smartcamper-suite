@@ -101,13 +101,30 @@ try {
   await page.locator("#first .route-calculate").click();
   assert.deepEqual(calls.at(-1), ["smartcamper_suite", "calculate_route", { vehicle_id: "womo", origin: { latitude: 50, longitude: 8 }, destination: { latitude: 51, longitude: 9 }, via: [] }]);
   await page.evaluate(() => document.querySelector("#first").setConfig({ type: "custom:smartcamper-card", module: "travel_journal", vehicle_id: "womo" }));
+  await page.evaluate(() => {
+    window.journalWsCalls = [];
+    const hassObject = document.querySelector("#first").hass;
+    hassObject.callWS = async (message) => {
+      window.journalWsCalls.push(message);
+      if (message.type.endsWith("list_drives")) return { drives: [{ id: "drive_1", source: "manual", started_at: "2026-01-01T10:00:00Z", ended_at: "2026-01-01T10:30:00Z" }] };
+      if (message.type.endsWith("list_suggestions")) return { suggestions: [{ id: "suggestion_1", arrived_at: "2026-01-01T11:00:00Z" }] };
+      if (message.type.endsWith("export_pdf")) return { pdf_base64: "JVBERi0xLjQKJSVFT0YK", filename: "journal.pdf" };
+      return {};
+    };
+    document.querySelector("#first").hass = hassObject;
+  });
+  await page.locator("#first .journal-drive-delete").waitFor();
   assert.match(await page.locator("#first").innerText(), /Alpenfahrt/);
   assert.match(await page.locator("#first").innerText(), /2 Reisen/);
+  assert.match(await page.locator("#first").innerText(), /drive_1|manual/);
+  await page.locator("#first input[name=start_location]").fill("Start");
+  await page.locator("#first input[name=end_location]").fill("Ziel");
+  await page.locator("#first input[name=distance_km]").fill("12.5");
+  await page.locator("#first input[name=occurred_at]").fill("2026-01-01T10:00");
+  await page.locator("#first .journal-drive-form button").click();
+  assert.equal((await page.evaluate(() => window.journalWsCalls.filter((message) => message.type.endsWith("create_manual_drive")).length)), 1);
   await page.locator("#first .journal-create").click();
   assert.deepEqual(calls.at(-1), ["smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: "womo", title: "Neue Reise" }]);
-  await page.evaluate(() => {
-    document.querySelector("#first").hass.callWS = async () => ({ pdf_base64: "JVBERi0xLjQKJSVFT0YK", filename: "journal.pdf" });
-  });
   const journalPdf = await Promise.all([
     page.waitForEvent("download"),
     page.locator("#first .journal-pdf").click(),

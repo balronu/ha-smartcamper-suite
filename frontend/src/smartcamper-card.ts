@@ -22,6 +22,9 @@ class SmartCamperCard extends HTMLElement {
   private _hass?: HassLike;
   private routeVia: RoutePoint[] = [];
   private routeMap?: L.Map;
+  private journalDetails?: JournalView;
+  private journalDetailsVehicle?: string;
+  private journalDetailsLoading = false;
 
   setConfig(raw: CardConfig): void {
     this.config = validateConfig(raw);
@@ -99,7 +102,9 @@ class SmartCamperCard extends HTMLElement {
       const vehicleId = selectVehicle(this.config, states);
       const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId && state.attributes?.database === "smartcamper_suite_travel_journal.sqlite");
       const journal = sensor?.attributes as JournalView | undefined;
-      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.journal-create,.journal-pdf,.journal-gpx-label{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}.journal-gpx{display:none}</style>${renderJournalHtml(journal, this.config)}`;
+      const view = journal && this.journalDetailsVehicle === vehicleId ? { ...journal, ...this.journalDetails } : journal;
+      this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions,.journal-record-actions,.journal-drive-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.journal-drives,.journal-suggestions{margin-top:12px}.journal-drives ul,.journal-suggestions ul{padding-left:18px}.journal-drive-form input{min-width:95px}.journal-create,.journal-pdf,.journal-gpx-label,.journal-drive-form button,.journal-record-actions button,.journal-drives button,.journal-suggestions button{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}.journal-gpx{display:none}</style>${renderJournalHtml(view, this.config)}`;
+      void this.loadJournalDetails(vehicleId);
       this.querySelector(".journal-create")?.addEventListener("click", () => {
         if (vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: vehicleId, title: "Neue Reise" });
       });
@@ -126,6 +131,46 @@ class SmartCamperCard extends HTMLElement {
         if (!file || !vehicleId || !this._hass?.callWS) return;
         const encoded = btoa(String.fromCharCode(...new Uint8Array(await file.arrayBuffer())));
         await this._hass.callWS({ type: "smartcamper_suite/journal/import_gpx", vehicle_id: vehicleId, content_base64: encoded });
+      });
+      this.querySelector<HTMLFormElement>(".journal-drive-form")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget as HTMLFormElement;
+        if (!vehicleId || !tripId || !this._hass?.callWS) return;
+        const data = new FormData(form);
+        await this._hass.callWS({ type: "smartcamper_suite/journal/create_manual_drive", vehicle_id: vehicleId, trip_id: tripId, occurred_at: String(data.get("occurred_at") ?? ""), start_location: String(data.get("start_location") ?? ""), end_location: String(data.get("end_location") ?? ""), distance_km: Number(data.get("distance_km") ?? 0) });
+        this.journalDetails = undefined;
+        this.journalDetailsVehicle = undefined;
+        this.render();
+      });
+      this.querySelectorAll<HTMLButtonElement>(".journal-drive-link").forEach((button) => button.addEventListener("click", () => {
+        if (vehicleId && tripId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/link_drives", trip_id: tripId, drive_ids: [button.dataset.driveId] });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-drive-unlink").forEach((button) => button.addEventListener("click", () => {
+        if (tripId && button.dataset.driveId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/unlink_drive", trip_id: tripId, drive_id: button.dataset.driveId });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-drive-delete").forEach((button) => button.addEventListener("click", () => {
+        if (button.dataset.driveId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_manual_drive", drive_id: button.dataset.driveId });
+      }));
+      this.querySelector(".journal-route")?.addEventListener("click", () => {
+        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/route", vehicle_id: vehicleId, trip_id: tripId });
+      });
+      this.querySelector(".journal-suggestions-generate")?.addEventListener("click", () => {
+        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/generate_suggestions", vehicle_id: vehicleId, trip_id: tripId });
+      });
+      this.querySelectorAll<HTMLButtonElement>(".journal-suggestion-accept").forEach((button) => button.addEventListener("click", () => {
+        if (button.dataset.suggestionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/accept_suggestion", suggestion_id: button.dataset.suggestionId, trip_id: tripId });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-suggestion-dismiss").forEach((button) => button.addEventListener("click", () => {
+        if (button.dataset.suggestionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/dismiss_suggestion", suggestion_id: button.dataset.suggestionId });
+      }));
+      this.querySelector(".journal-stop-create")?.addEventListener("click", () => {
+        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_stop", vehicle_id: vehicleId, trip_id: tripId, name: "Neuer Stopp", occurred_at: new Date().toISOString() });
+      });
+      this.querySelector(".journal-expense-create")?.addEventListener("click", () => {
+        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_expense", vehicle_id: vehicleId, trip_id: tripId, category: "other", amount_minor: 0, currency: "EUR" });
+      });
+      this.querySelector(".journal-diagnostics")?.addEventListener("click", () => {
+        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/diagnostics", vehicle_id: vehicleId });
       });
       return;
     }
@@ -253,6 +298,25 @@ class SmartCamperCard extends HTMLElement {
       current.fuel_prices = { ...(current.fuel_prices ?? {}), ...(station.fuel_type ? { [station.fuel_type]: station.price ?? null } : station.fuel_prices ?? {}) };
     }
     return [...merged.values()];
+  }
+
+  private async loadJournalDetails(vehicleId: string | undefined): Promise<void> {
+    if (!vehicleId || !this._hass?.callWS || this.journalDetailsLoading || this.journalDetailsVehicle === vehicleId) return;
+    this.journalDetailsLoading = true;
+    try {
+      const [drives, suggestions] = await Promise.all([
+        this._hass.callWS({ type: "smartcamper_suite/journal/list_drives", vehicle_id: vehicleId }),
+        this._hass.callWS({ type: "smartcamper_suite/journal/list_suggestions", vehicle_id: vehicleId, status: "pending" }),
+      ]);
+      this.journalDetails = { vehicle_id: vehicleId, drives: drives?.drives ?? [], suggestions: suggestions?.suggestions ?? [] };
+      this.journalDetailsVehicle = vehicleId;
+      this.render();
+    } catch {
+      this.journalDetails = { vehicle_id: vehicleId, drives: [], suggestions: [] };
+      this.journalDetailsVehicle = vehicleId;
+    } finally {
+      this.journalDetailsLoading = false;
+    }
   }
 }
 

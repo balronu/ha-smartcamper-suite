@@ -5,9 +5,10 @@
       "providers": {"title": "Anbieter & API-Zugänge", "description": "Anbieter unabhängig aktivieren. Ein Anbieterzugang kann von allen Fahrzeugen verwendet werden.", "data": {"enabled_providers": "Aktivierte Anbieter"}},
       "provider_credentials": {"title": "Anbieter-Zugänge", "description": "Leer lassen, um den gespeicherten Zugang zu behalten. Gespeicherte Schlüssel werden nicht erneut angezeigt.", "data": {"tankerkoenig_api_key": "Tankerkönig-API-Schlüssel", "petromap_api_key": "Petromap-API-Schlüssel", "nakordoni_api_key": "Nakordoni-API-Schlüssel", "nakordoni_oauth": "Bei Nakordoni mit OAuth anmelden"}},
       "vehicles": {"title": "Fahrzeuge verwalten", "description": "Fahrzeuge hinzufügen, bearbeiten oder entfernen, ohne globale Anbieterzugänge zu ändern.", "data": {"action": "Fahrzeugaktion", "vehicle_id": "Fahrzeug"}},
-      "vehicle": {"title": "Fahrzeugdaten", "description": "GPS-Tracker und Kraftstoffe auswählen. Abmessungen sind optional.", "data": {"name": "Fahrzeugname", "tracker_entity_id": "GPS-Tracker", "length_m": "Länge (m)", "width_m": "Breite (m)", "height_m": "Höhe (m)", "weight_t": "Gewicht (t)", "axle_count": "Achsenzahl", "fuel_types": "Unterstützte Kraftstoffe"}, "selector": {"fuel_types": {"options": {"diesel": "Diesel", "e5": "Benzin E5", "e10": "Benzin E10", "lpg": "LPG", "hvo100": "HVO100"}}}},
+      "vehicle": {"title": "Fahrzeugdaten", "description": "GPS-Tracker und Kraftstoffe auswählen. Abmessungen sind optional.", "data": {"name": "Fahrzeugname", "tracker_entity_id": "GPS-Tracker", "length_m": "Länge (m)", "width_m": "Breite (m)", "height_m": "Höhe (m)", "weight_t": "Gewicht (t)", "axle_count": "Achsenzahl", "fuel_types": "Unterstützte Kraftstoffe"}},
       "modules": {"title": "Module", "description": "Die gewünschten Suite-Module aktivieren.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
       "common": {"title": "Aktualisierung & allgemeine Einstellungen", "description": "Festlegen, wie oft die Suite Daten aktualisiert.", "data": {"refresh_mode": "Aktualisierungsmodus", "refresh_interval_min": "Aktualisierungsintervall (Minuten)"}}
-    }
+    },
+    "selector": {"fuel_types": {"options": {"diesel": "Diesel", "e5": "Benzin E5", "e10": "Benzin E10", "lpg": "LPG", "hvo100": "HVO100"}}}
   }
 }

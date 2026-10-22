@@ -66,9 +66,17 @@ def test_config_flow_and_options_flow_are_available_without_credentials():
         flow.context = {}
         form = await flow.async_step_user()
         assert form["type"] == "form"
-        result = await flow.async_step_user({})
+        assert form["step_id"] == "vehicle"
+        providers = await flow.async_step_vehicle({"name": "Wohnmobil", "tracker_entity_id": "device_tracker.wohnmobil_zoe", "fuel_types": "diesel,e5"})
+        assert providers["step_id"] == "providers"
+        modules = await flow.async_step_providers({})
+        assert modules["step_id"] == "modules"
+        common = await flow.async_step_modules({"travel_journal": True, "fuel_stations": True, "route_planner": True})
+        assert common["step_id"] == "common"
+        result = await flow.async_step_common({"refresh_mode": "automatic", "refresh_interval_min": 15, "journal_legacy_import": False})
         assert result["type"] == "create_entry"
-        assert result["options"]["modules"] == dict(DEFAULT_MODULES)
+        assert result["options"]["modules"] == {key: True for key in DEFAULT_MODULES}
+        assert result["options"]["vehicles"][0]["tracker_entity_id"] == "device_tracker.wohnmobil_zoe"
 
         existing = SmartCamperConfigFlow()
         existing.hass = SimpleNamespace(
@@ -83,7 +91,11 @@ def test_config_flow_and_options_flow_are_available_without_credentials():
             config_entries=SimpleNamespace(async_get_known_entry=lambda _entry_id: config_entry)
         )
         options.handler = config_entry.entry_id
-        option_result = await options.async_step_init({ModuleName.ROUTE_PLANNER.value: True})
+        assert (await options.async_step_init())["step_id"] == "vehicle"
+        assert (await options.async_step_vehicle({"name": "Wohnmobil", "fuel_types": "diesel"}))["step_id"] == "providers"
+        assert (await options.async_step_providers({}))["step_id"] == "modules"
+        assert (await options.async_step_modules({ModuleName.ROUTE_PLANNER.value: True}))["step_id"] == "common"
+        option_result = await options.async_step_common({"refresh_mode": "manual", "refresh_interval_min": 30, "journal_legacy_import": False})
         assert option_result["type"] == "create_entry"
         assert option_result["data"]["modules"][ModuleName.ROUTE_PLANNER.value] is True
 

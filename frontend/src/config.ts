@@ -234,7 +234,7 @@ export function downloadGpx(route: RouteView, origin: RoutePoint, destination: R
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-const MODULES = new Set(["travel_journal", "fuel_stations", "route_planner", "border_forecast"]);
+const MODULES = new Set(["travel_journal", "fuel_stations", "route_planner"]);
 
 export function validateConfig(config: CardConfig): CardConfig {
   if (!MODULES.has(config.module)) throw new Error("Unknown SmartCamper module");

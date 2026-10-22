@@ -1,1 +1,17 @@
-{"config":{"abort":{"single_instance_allowed":"Only one SmartCamper Suite entry is supported."},"step":{"user":{"title":"SmartCamper Suite","description":"Create the shared suite entry."}}}}
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "Only one SmartCamper Suite entry is supported.",
+      "oauth_implementation_unavailable": "The Nakordoni OAuth configuration is unavailable.",
+      "oauth_timeout": "The Nakordoni sign-in timed out.",
+      "oauth_failed": "The Nakordoni sign-in failed.",
+      "oauth_error": "Nakordoni did not return a valid sign-in."
+    },
+    "step": {
+      "vehicle": {"title": "Vehicle and GPS", "description": "Create a vehicle and select its GPS tracker.", "data": {"name": "Vehicle name", "tracker_entity_id": "GPS tracker", "length_m": "Length (m)", "width_m": "Width (m)", "height_m": "Height (m)", "weight_t": "Weight (t)", "axle_count": "Axles", "fuel_types": "Fuel types (comma-separated)"}},
+      "providers": {"title": "Providers", "description": "API keys are stored only in the Config Entry. Leave unused providers empty.", "data": {"tankerkoenig_api_key": "Tankerkönig API key", "petromap_api_key": "Petromap API key", "nakordoni_api_key": "Nakordoni API key", "nakordoni_oauth": "Sign in to Nakordoni with OAuth"}},
+      "modules": {"title": "Modules", "description": "Enable only the three available Suite modules.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
+      "common": {"title": "Shared settings", "description": "Set refresh behavior and safe import boundaries.", "data": {"refresh_mode": "Refresh mode", "refresh_interval_min": "Refresh interval (minutes)", "journal_legacy_import": "Legacy journal import (dry-run only)"}}
+    }
+  }
+}

@@ -32,7 +32,6 @@ def test_readme_branding_and_module_assets_are_repository_local():
             "docs/assets/module-travel-journal.svg",
             "docs/assets/module-fuel-stations.svg",
             "docs/assets/module-route-planner.svg",
-            "docs/assets/module-border-forecast.svg",
         ):
             assert asset in text
             assert (ROOT / asset).is_file()

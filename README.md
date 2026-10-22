@@ -2,7 +2,7 @@
 
 [Deutsch](README.md) | [English](README.en.md)
 
-**Öffentliche Test-Beta: `v0.3.0-beta.2` (Release-Kandidat).**
+**Öffentliche Test-Beta: `v0.3.0-beta.3` (Hotfix-Kandidat).**
 
 Die Stable-Integrationen bleiben die Produktionsreferenz. Diese Beta ist nur
 für einen isolierten, kontrollierten Home-Assistant-Test vorgesehen.
@@ -25,7 +25,7 @@ Karte `custom:smartcamper-card`.
 Die Beta kann über **HACS → Integrationen → Benutzerdefinierte Repositories**
 installiert werden. Repository hinzufügen:
 `https://github.com/balronu/ha-smartcamper-suite`, Typ **Integration**.
-Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.2` installieren,
+Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.3` installieren,
 sobald der Release veröffentlicht ist.
 Nach der Installation Home Assistant neu starten und die Suite unter
 **Einstellungen → Geräte & Dienste** als separaten Config Entry hinzufügen.
@@ -78,7 +78,6 @@ Die Vorbereitung des ersten isolierten HA-Praxistests steht in
 | Camper Travel Journal | [Reisetagebuch](docs/assets/module-travel-journal.svg) | Phase-2D-Grundfunktionen, offline getestet |
 | Mobile Fuel Stations | [Tankstellen](docs/assets/module-fuel-stations.svg) | Phase-2B-Kandidat, offline getestet |
 | Camper Route Planner | [Routenplanung](docs/assets/module-route-planner.svg) | Phase-2C-Kandidat, offline getestet |
-| Wartezeiten Forecast | [Grenzwartezeiten](docs/assets/module-border-forecast.svg) | Platzhalter, Phase 2B nicht implementiert |
 
 Die Branding-Pfade und die Herkunft der freigegebenen Logo-Datei sind in
 [docs/branding.md](docs/branding.md) dokumentiert.

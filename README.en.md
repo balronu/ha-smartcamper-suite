@@ -2,7 +2,7 @@
 
 [Deutsch](README.md) | [English](README.en.md)
 
-**Public test pre-release: `v0.3.0-beta.2` (release candidate).**
+**Public test pre-release: `v0.3.0-beta.3` (hotfix candidate).**
 
 The Stable integrations remain the production reference. This beta is intended
 only for an isolated, controlled Home Assistant test.
@@ -22,7 +22,7 @@ foundation for `custom:smartcamper-card`.
 
 The beta can be installed through **HACS → Integrations → Custom repositories**.
 Add `https://github.com/balronu/ha-smartcamper-suite` as an **Integration**,
-enable pre-releases, and select `v0.3.0-beta.2` once it is published. Restart Home Assistant and
+enable pre-releases, and select `v0.3.0-beta.3` once it is published. Restart Home Assistant and
 add the Suite as a separate Config Entry under **Settings → Devices & services**.
 Existing Stable integrations are not replaced or removed.
 
@@ -73,7 +73,6 @@ The detailed v0.8.4 comparison is documented in
 | Camper Travel Journal | [Travel journal](docs/assets/module-travel-journal.svg) | Phase 2D core functions; tested offline |
 | Mobile Fuel Stations | [Fuel stations](docs/assets/module-fuel-stations.svg) | Phase 2B candidate; tested offline |
 | Camper Route Planner | [Route planning](docs/assets/module-route-planner.svg) | Phase 2C candidate; tested offline |
-| Wartezeiten Forecast | [Border wait times](docs/assets/module-border-forecast.svg) | Placeholder; not implemented in Phase 2B |
 
 Branding paths and approved-artwork provenance are documented in
 [docs/branding.md](docs/branding.md).

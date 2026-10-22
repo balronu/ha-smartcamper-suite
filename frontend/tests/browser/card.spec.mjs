@@ -40,6 +40,13 @@ try {
   await page.exposeFunction("recordService", (...args) => calls.push(args));
   await page.setContent("<base href='http://smartcamper.test/'><div id='root'></div>");
   await page.addScriptTag({ path: bundle });
+  const registration = await page.evaluate(() => ({
+    card: window.customCards?.find((item) => item.type === "smartcamper-card"),
+    hasBorderForecast: Boolean(window.customCards?.some((item) => item.type === "border_forecast")),
+  }));
+  assert.equal(registration.card.name, "SmartCamper Suite");
+  assert.equal(registration.card.preview, true);
+  assert.equal(registration.hasBorderForecast, false);
   await page.evaluate(({ hass }) => {
     hass.callService = (...args) => window.recordService(...args);
     const root = document.querySelector("#root");

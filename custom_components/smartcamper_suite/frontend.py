@@ -9,9 +9,9 @@ except ImportError:  # Offline domain tests do not install Home Assistant.
     StaticPathConfig = None  # type: ignore[assignment]
     HomeAssistant = object  # type: ignore[assignment,misc]
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 
-RESOURCE_URL = f"/{DOMAIN}/smartcamper-card.js"
+RESOURCE_URL = f"/{DOMAIN}/smartcamper-card.js?v={VERSION}"
 LOGO_URL = f"/{DOMAIN}/logos"
 _FRONTEND_STATE = "_frontend"
 

@@ -1,6 +1,9 @@
 # SmartCamper Suite
 
-**Phase 2D development — not a production release.**
+**Pre-release: v0.3.0-beta.1 — kontrollierte Test-Beta.**
+
+Die Stable-Integrationen bleiben die Produktionsreferenz. Diese Beta ist nur
+für einen isolierten, kontrollierten Home-Assistant-Test vorgesehen.
 
 <p align="center"><img src="docs/assets/smartcamper-suite-logo-set.png" alt="SmartCamper Suite Logo-Set" width="720"></p>
 
@@ -15,6 +18,20 @@ versioned suite storage, four isolated module runtimes, and the foundation for
 
 ## Current scope
 
+### HACS-Testinstallation
+
+Die Beta kann über **HACS → Integrationen → Benutzerdefinierte Repositories**
+installiert werden. Repository hinzufügen:
+`https://github.com/balronu/ha-smartcamper-suite`, Typ **Integration**.
+Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.1` installieren.
+Nach der Installation Home Assistant neu starten und die Suite unter
+**Einstellungen → Geräte & Dienste** als separaten Config Entry hinzufügen.
+Bestehende Stable-Integrationen werden nicht ersetzt oder entfernt.
+
+Für den ersten Test nur synthetische beziehungsweise ausdrücklich freigegebene
+Providerdaten verwenden. Ein echter Legacy-Journal-Import ist nicht Teil der
+Installation; zunächst ist ausschließlich der Dry-Run zulässig.
+
 The `fuel_stations` module now provides offline-testable Tankerkönig, Petromap
 and Nakordoni adapters, vehicle-scoped search settings, shared provider
 credentials, provider fallback, per-vehicle sensors and the fuel-stations view
@@ -23,9 +40,11 @@ highlights, navigation, provider logos, diagnostics, automatic/movement-based
 refresh and manual refresh. OAuth refresh and legacy migration are tested as
 isolated candidate paths; no legacy entry is changed automatically.
 
-This is still development code. It does not open or migrate a productive
-database, use real credentials, perform live API calls in tests, or install
-anything in Home Assistant VM 104.
+This is a controlled test beta, not a stable release. HACS users must enable
+pre-releases and select `v0.3.0-beta.1`. It does not open or migrate a
+productive database, use real credentials in tests, perform live API calls in
+tests, or install anything in Home Assistant VM 104. Keep the three Stable
+integrations installed side by side and follow the practical-test checklist.
 
 Das `route_planner`-Modul verwendet die zentralen Fahrzeugprofile und bietet
 explizite Routenberechnung, interaktive Start-/Ziel-/Zwischenstoppbearbeitung,

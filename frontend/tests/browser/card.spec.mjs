@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const bundle = join(here, "..", "..", "..", "custom_components", "smartcamper_suite", "smartcamper-card.js");
+const logoRoot = join(here, "..", "..", "..", "custom_components", "smartcamper_suite", "logos");
+const screenshots = join(here, "..", "..", "..", "docs", "images");
+mkdirSync(screenshots, { recursive: true });
 const calls = [];
 const hass = {
   states: {
@@ -28,8 +31,14 @@ const executablePath = process.env.CHROMIUM_PATH ?? (existsSync("/usr/bin/chromi
 const browser = await chromium.launch({ executablePath, headless: true, args: ["--no-sandbox"] });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
+  await page.route("**/smartcamper_suite/logos/**", async (route) => {
+    const name = new URL(route.request().url()).pathname.split("/").pop();
+    const logo = name ? join(logoRoot, name) : "";
+    if (logo && existsSync(logo)) await route.fulfill({ path: logo });
+    else await route.continue();
+  });
   await page.exposeFunction("recordService", (...args) => calls.push(args));
-  await page.setContent("<div id='root'></div>");
+  await page.setContent("<base href='http://smartcamper.test/'><div id='root'></div>");
   await page.addScriptTag({ path: bundle });
   await page.evaluate(({ hass }) => {
     hass.callService = (...args) => window.recordService(...args);
@@ -52,6 +61,7 @@ try {
   assert.match(await page.locator("#first").innerText(), /Far Fuel/);
   assert.equal(await page.locator("#first .brand-logo").count(), 2);
   assert.match((await page.locator("#first .brand-logo").allTextContents()).join(" ") + (await page.locator("#first .brand-logo").nth(1).getAttribute("src")), /shell\.png|aral\.png/);
+  await page.locator("#first").screenshot({ path: join(screenshots, "smartcamper-card-fuel-stations.png") });
   assert.match(await page.locator("#first .navigate").first().getAttribute("href"), /google\.com\/maps\/dir/);
   for (const mode of ["compact", "detailed", "individual"]) {
     await page.evaluate((mode) => document.querySelector("#first").setConfig({ type: "custom:smartcamper-card", module: "fuel_stations", vehicle_id: "womo", display_mode: mode }), mode);
@@ -73,6 +83,8 @@ try {
     const card = document.createElement("smartcamper-card");
     document.body.append(card);
     const editor = card.getConfigElement();
+    editor.id = "smartcamper-card-editor";
+    document.body.append(editor);
     let detail;
     editor.addEventListener("config-changed", (event) => { detail = event.detail; });
     editor.querySelector("[data-field=sort_mode]").value = "price";
@@ -82,11 +94,13 @@ try {
     return { sort: detail.config.sort_mode, fetch: detail.config.fetch_mode };
   });
   assert.deepEqual(editorResult, { sort: "price", fetch: "manual" });
+  await page.locator("#smartcamper-card-editor").screenshot({ path: join(screenshots, "smartcamper-card-configuration.png") });
   await page.evaluate(() => document.querySelector("#first").setConfig({ type: "custom:smartcamper-card", module: "route_planner", vehicle_id: "womo", origin: { latitude: 50, longitude: 8 }, destination: { latitude: 51, longitude: 9 } }));
   assert.equal(await page.locator("#first .route-map").count(), 1);
   assert.match(await page.locator("#first").innerText(), /123\.5 km/);
   assert.match(await page.locator("#first").innerText(), /Beta/);
   assert.equal(await page.locator("#first .route-navigation").count(), 1);
+  await page.locator("#first").screenshot({ path: join(screenshots, "smartcamper-card-route-planner.png") });
   await page.locator("#first .route-add").click();
   assert.equal(await page.locator("#first .route-remove").count(), 1);
   await page.locator("#first .route-remove").click();
@@ -115,6 +129,7 @@ try {
     };
     document.querySelector("#first").hass = hassObject;
   });
+  await page.locator("#first").screenshot({ path: join(screenshots, "smartcamper-card-travel-journal.png") });
   await page.locator("#first .journal-drive-delete").waitFor();
   assert.match(await page.locator("#first").innerText(), /Alpenfahrt/);
   assert.match(await page.locator("#first").innerText(), /2 Reisen/);

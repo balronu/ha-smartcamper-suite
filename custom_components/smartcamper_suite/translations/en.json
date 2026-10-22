@@ -1,6 +1,6 @@
 {
   "config": {
-    "abort": {"single_instance_allowed": "Only one SmartCamper Suite entry is supported.", "oauth_implementation_unavailable": "Nakordoni OAuth is not available.", "oauth_timeout": "Nakordoni sign-in timed out.", "oauth_failed": "Nakordoni sign-in failed.", "oauth_error": "Nakordoni did not return a valid sign-in."},
+    "abort": {"single_instance_allowed": "Only one SmartCamper Suite entry is supported.", "oauth_implementation_unavailable": "Nakordoni OAuth is not available.", "oauth_timeout": "Nakordoni sign-in timed out.", "oauth_failed": "Nakordoni sign-in failed.", "oauth_error": "Nakordoni did not return a valid sign-in.", "oauth_not_configured": "Nakordoni OAuth is not configured for this entry."},
     "step": {
       "providers": {"title": "Providers & API access", "description": "Enable providers independently. The same provider account can be shared by all vehicles.", "data": {"enabled_providers": "Enabled providers"}},
       "provider_credentials": {"title": "Provider credentials", "description": "Leave blank to keep the stored credential. Stored keys are never shown again.", "data": {"tankerkoenig_api_key": "Tankerkönig API key", "petromap_api_key": "Petromap API key", "nakordoni_api_key": "Nakordoni API key", "nakordoni_oauth": "Sign in to Nakordoni with OAuth"}},

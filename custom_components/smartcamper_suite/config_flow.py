@@ -9,6 +9,7 @@ from uuid import uuid4
 import voluptuous as vol
 from aiohttp import ClientError
 from homeassistant import config_entries
+from homeassistant.config_entries import SOURCE_RECONFIGURE
 from homeassistant.helpers import config_entry_oauth2_flow, selector
 
 from .const import CONF_NAKORDONI_AUTH_METHOD, DEFAULT_MODULES, DOMAIN, ModuleName
@@ -42,22 +43,10 @@ def _stored_enabled(data: dict[str, Any], options: dict[str, Any]) -> list[str]:
 
 def _vehicle_schema(current: Vehicle | None = None) -> vol.Schema:
     current = current or Vehicle.create("Wohnmobil")
-    return vol.Schema({
+    fields: dict[Any, Any] = {
         vol.Required("name", default=current.name): vol.All(str, vol.Length(min=1, max=80)),
         vol.Optional("tracker_entity_id", default=current.tracker_entity_id): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="device_tracker")
-        ),
-        vol.Optional("length_m", default=current.length_m): selector.NumberSelector(
-            selector.NumberSelectorConfig(min=0.1, max=30, step=0.01, mode=selector.NumberSelectorMode.BOX)
-        ),
-        vol.Optional("width_m", default=current.width_m): selector.NumberSelector(
-            selector.NumberSelectorConfig(min=0.1, max=5, step=0.01, mode=selector.NumberSelectorMode.BOX)
-        ),
-        vol.Optional("height_m", default=current.height_m): selector.NumberSelector(
-            selector.NumberSelectorConfig(min=0.1, max=6, step=0.01, mode=selector.NumberSelectorMode.BOX)
-        ),
-        vol.Optional("weight_t", default=current.weight_t): selector.NumberSelector(
-            selector.NumberSelectorConfig(min=0.1, max=100, step=0.1, mode=selector.NumberSelectorMode.BOX)
         ),
         vol.Optional("axle_count", default=str(current.axle_count) if current.axle_count else "2"): selector.SelectSelector(
             selector.SelectSelectorConfig(options=[str(value) for value in range(1, 7)], mode=selector.SelectSelectorMode.DROPDOWN)
@@ -65,7 +54,20 @@ def _vehicle_schema(current: Vehicle | None = None) -> vol.Schema:
         vol.Required("fuel_types", default=current.fuel_types or ["diesel"]): selector.SelectSelector(
             selector.SelectSelectorConfig(options=list(_FUEL_TYPES), multiple=True, mode=selector.SelectSelectorMode.DROPDOWN)
         ),
-    })
+    }
+    numeric_fields = {
+        "length_m": (30, 0.01),
+        "width_m": (5, 0.01),
+        "height_m": (6, 0.01),
+        "weight_t": (100, 0.1),
+    }
+    for name, (maximum, step) in numeric_fields.items():
+        config = selector.NumberSelectorConfig(min=0.1, max=maximum, step=step, mode=selector.NumberSelectorMode.BOX)
+        if (value := getattr(current, name)) is None:
+            fields[vol.Optional(name)] = selector.NumberSelector(config)
+        else:
+            fields[vol.Optional(name, default=value)] = selector.NumberSelector(config)
+    return vol.Schema(fields)
 
 
 def _provider_selection_schema(current: list[str]) -> vol.Schema:
@@ -194,7 +196,19 @@ class SmartCamperConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, 
         token = {**token, "expires_in": expires_in, "expires_at": time.time() + expires_in}
         pending = dict(getattr(self, "_oauth_pending_data", {}))
         pending["_data"] = {**pending["_data"], "token": token, "auth_implementation": self.flow_impl.domain, CONF_NAKORDONI_AUTH_METHOD: "oauth2"}
+        if self.source == SOURCE_RECONFIGURE:
+            return self.async_update_reload_and_abort(self._get_reconfigure_entry(), data=pending["_data"])
         return self.async_create_entry(title="SmartCamper Suite", data=pending["_data"], options=pending["_options"])
+
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
+        """Start an explicit Nakordoni connection renewal without changing options."""
+        entry = self._get_reconfigure_entry()
+        if entry.data.get("auth_implementation") != "nakordoni":
+            return self.async_abort(reason="oauth_not_configured")
+        implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(self.hass, entry)
+        self.flow_impl = implementation
+        self._oauth_pending_data = {"_data": dict(entry.data), "_options": dict(entry.options)}
+        return await self.async_step_auth()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         if self._async_current_entries():

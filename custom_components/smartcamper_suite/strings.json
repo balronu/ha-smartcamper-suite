@@ -5,7 +5,8 @@
       "oauth_implementation_unavailable": "Nakordoni OAuth is not available.",
       "oauth_timeout": "Nakordoni sign-in timed out.",
       "oauth_failed": "Nakordoni sign-in failed.",
-      "oauth_error": "Nakordoni did not return a valid sign-in."
+      "oauth_error": "Nakordoni did not return a valid sign-in.",
+      "oauth_not_configured": "Nakordoni OAuth is not configured for this entry."
     },
     "step": {
       "providers": {"title": "Providers & API access", "description": "Enable providers independently. The same provider account can be shared by all vehicles.", "data": {"enabled_providers": "Enabled providers"}},

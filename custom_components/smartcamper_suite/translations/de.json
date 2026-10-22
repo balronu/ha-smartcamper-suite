@@ -1,6 +1,6 @@
 {
   "config": {
-    "abort": {"single_instance_allowed": "Es wird nur ein SmartCamper-Suite-Eintrag unterstützt.", "oauth_implementation_unavailable": "Nakordoni-OAuth ist nicht verfügbar.", "oauth_timeout": "Die Nakordoni-Anmeldung hat zu lange gedauert.", "oauth_failed": "Die Nakordoni-Anmeldung ist fehlgeschlagen.", "oauth_error": "Nakordoni hat keine gültige Anmeldung zurückgegeben."},
+    "abort": {"single_instance_allowed": "Es wird nur ein SmartCamper-Suite-Eintrag unterstützt.", "oauth_implementation_unavailable": "Nakordoni-OAuth ist nicht verfügbar.", "oauth_timeout": "Die Nakordoni-Anmeldung hat zu lange gedauert.", "oauth_failed": "Die Nakordoni-Anmeldung ist fehlgeschlagen.", "oauth_error": "Nakordoni hat keine gültige Anmeldung zurückgegeben.", "oauth_not_configured": "Nakordoni-OAuth ist für diesen Eintrag nicht eingerichtet."},
     "step": {
       "providers": {"title": "Anbieter & API-Zugänge", "description": "Anbieter unabhängig aktivieren. Ein Anbieterzugang kann von allen Fahrzeugen verwendet werden.", "data": {"enabled_providers": "Aktivierte Anbieter"}},
       "provider_credentials": {"title": "Anbieter-Zugänge", "description": "Leer lassen, um den gespeicherten Zugang zu behalten. Gespeicherte Schlüssel werden nicht erneut angezeigt.", "data": {"tankerkoenig_api_key": "Tankerkönig-API-Schlüssel", "petromap_api_key": "Petromap-API-Schlüssel", "nakordoni_api_key": "Nakordoni-API-Schlüssel", "nakordoni_oauth": "Bei Nakordoni mit OAuth anmelden"}},

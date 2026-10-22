@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+import time
 from types import MappingProxyType, SimpleNamespace
 
 import pytest
@@ -151,6 +152,74 @@ def test_options_flow_edits_and_removes_one_vehicle_without_losing_global_provid
         assert [vehicle["name"] for vehicle in vehicles] == ["Wohnmobil XL"]
         assert result["data"]["enabled_providers"] == ["tankerkoenig", "nakordoni"]
         assert result["data"]["provider_accounts"]["nakordoni"]["credential_id"] == "nakordoni-api-key"
+
+    asyncio.run(run())
+
+
+def test_reconfigure_starts_oauth_renewal_without_replacing_suite_options(monkeypatch):
+    async def run():
+        entry = ConfigEntry(
+            data={"auth_implementation": "nakordoni", "token": {"access_token": "old-token"}},
+            domain=DOMAIN,
+            title="SmartCamper Suite",
+            source="user",
+            version=1,
+            minor_version=0,
+            options={"vehicles": [{"vehicle_id": "womo", "name": "Wohnmobil"}]},
+            entry_id="suite-oauth",
+            unique_id=None,
+            discovery_keys=MappingProxyType({}),
+            subentries_data=None,
+        )
+        hass = SimpleNamespace(config_entries=SimpleNamespace(async_get_known_entry=lambda _entry_id: entry))
+
+        async def get_implementation(_hass, _entry):
+            return "synthetic-implementation"
+
+        monkeypatch.setattr(
+            "custom_components.smartcamper_suite.config_flow.config_entry_oauth2_flow.async_get_config_entry_implementation",
+            get_implementation,
+        )
+
+        flow = SmartCamperConfigFlow()
+        flow.hass = hass
+        flow.context = {"source": "reconfigure", "entry_id": entry.entry_id}
+
+        async def auth_step():
+            return {"type": "external", "data": {"source": "synthetic"}}
+
+        flow.async_step_auth = auth_step
+        result = await flow.async_step_reconfigure()
+
+        assert result == {"type": "external", "data": {"source": "synthetic"}}
+        assert flow.flow_impl == "synthetic-implementation"
+        assert flow._oauth_pending_data["_options"] == entry.options
+        assert flow._oauth_pending_data["_data"]["token"] == entry.data["token"]
+
+        class SyntheticFlow:
+            domain = "nakordoni"
+
+            async def async_resolve_external_data(self, _external_data):
+                return {"access_token": "new-token", "refresh_token": "new-refresh", "expires_in": 3600}
+
+        flow.flow_impl = SyntheticFlow()
+        flow.external_data = {"code": "synthetic"}
+        captured = {}
+
+        def update_reload_and_abort(config_entry, *, data):
+            captured.update({"entry": config_entry, "data": data})
+            return {"type": "abort", "reason": "reconfigure_successful"}
+
+        flow.async_update_reload_and_abort = update_reload_and_abort
+        result = await flow.async_step_creation()
+
+        assert result["reason"] == "reconfigure_successful"
+        assert captured["entry"] is entry
+        assert captured["data"]["auth_implementation"] == "nakordoni"
+        assert captured["data"]["token"]["access_token"] == "new-token"
+        assert captured["data"]["token"]["refresh_token"] == "new-refresh"
+        assert captured["data"]["token"]["expires_at"] > time.time()
+        assert flow._oauth_pending_data["_options"] == entry.options
 
     asyncio.run(run())
 

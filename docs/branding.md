@@ -36,7 +36,7 @@ behauptet.
 Die Bildfreigabe des Projektinhabers ist dokumentiert; eine separate
 markenrechtliche Prüfung der abgebildeten Wort-/Bildmarken ersetzt sie nicht.
 
-## Prüfstand für Beta 0.3.0-beta.3
+## Prüfstand für Beta 0.3.0-beta.4
 
 - Die GitHub-README verwendet ausschließlich relative, case-sensitive Pfade
   auf `docs/assets/` und `docs/images/`; die referenzierten Dateien werden im

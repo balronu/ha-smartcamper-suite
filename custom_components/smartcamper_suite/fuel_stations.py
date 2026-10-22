@@ -162,7 +162,10 @@ class _Adapter:
         headers = {"Authorization": f"Bearer {credential}"}
         if provider == "petromap":
             headers = {"x-api-key": credential}
-        response = await self._transport(provider, url, params, headers)
+        try:
+            response = await self._transport(provider, url, params, headers)
+        except TimeoutError as err:
+            raise FuelUnavailableError(f"{provider} request timed out") from err
         if response.status in (401, 403):
             raise FuelAuthError(f"{provider} credential rejected")
         if response.status == 429:
@@ -504,7 +507,7 @@ class FuelStationsRuntime:
                 try:
                     combined.extend(await task)
                     break
-                except (FuelUnavailableError, FuelRateLimitError):
+                except (FuelAuthError, FuelPermissionError, FuelUnavailableError, FuelRateLimitError):
                     continue
                 finally:
                     self._inflight.pop(key, None)

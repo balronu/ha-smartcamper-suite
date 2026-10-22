@@ -1,1 +1,1 @@
-{"config":{"step":{"user":{"title":"SmartCamper Suite","description":"Gemeinsamen Suite-Eintrag anlegen."}}}}
+{"config":{"abort":{"single_instance_allowed":{"title":"Bereits eingerichtet","description":"Es wird nur ein SmartCamper-Suite-Eintrag unterstützt."}},"step":{"user":{"title":"SmartCamper Suite","description":"Gemeinsamen Suite-Eintrag anlegen."}}}}

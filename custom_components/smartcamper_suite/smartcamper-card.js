@@ -7,6 +7,14 @@ function validateConfig(config) {
 
 // src/smartcamper-card.ts
 var SmartCamperCard = class extends HTMLElement {
+  getConfigElement() {
+    const editor = document.createElement("div");
+    editor.textContent = "SmartCamper Suite module editor (Phase 2A placeholder)";
+    return editor;
+  }
+  getStubConfig() {
+    return { type: "custom:smartcamper-card", module: "travel_journal" };
+  }
   setConfig(raw) {
     const config = validateConfig(raw);
     this.innerHTML = `<article><strong>SmartCamper Suite</strong><p>${config.module}</p><small>Phase 2A development placeholder \u2014 no live data</small></article>`;

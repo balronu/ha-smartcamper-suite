@@ -1,6 +1,16 @@
 import { type CardConfig, validateConfig } from "./config";
 
 class SmartCamperCard extends HTMLElement {
+  getConfigElement(): HTMLElement {
+    const editor = document.createElement("div");
+    editor.textContent = "SmartCamper Suite module editor (Phase 2A placeholder)";
+    return editor;
+  }
+
+  getStubConfig(): CardConfig {
+    return { type: "custom:smartcamper-card", module: "travel_journal" };
+  }
+
   setConfig(raw: CardConfig): void {
     const config = validateConfig(raw);
     this.innerHTML = `<article><strong>SmartCamper Suite</strong><p>${config.module}</p><small>Phase 2A development placeholder — no live data</small></article>`;

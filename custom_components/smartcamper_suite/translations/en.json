@@ -1,1 +1,1 @@
-{"config":{"step":{"user":{"title":"SmartCamper Suite","description":"Create the shared suite entry."}}}}
+{"config":{"abort":{"single_instance_allowed":{"title":"Already configured","description":"Only one SmartCamper Suite entry is supported."}},"step":{"user":{"title":"SmartCamper Suite","description":"Create the shared suite entry."}}}}

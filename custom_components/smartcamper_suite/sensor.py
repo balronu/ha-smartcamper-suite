@@ -41,25 +41,39 @@ class FuelStationsSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         stations = self._runtime.fuel.results.get((self._vehicle_id, "all"), [])
+        station_data: dict[str, dict[str, object]] = {}
+        for station in stations:
+            item = station_data.setdefault(station.station_id, {
+                "station_id": station.station_id,
+                "name": station.name,
+                "distance_km": station.distance_km,
+                "address": station.address,
+                "is_open": station.is_open,
+                "provider": station.provider,
+                "brand": station.brand,
+                "latitude": station.latitude,
+                "longitude": station.longitude,
+                "fuel_prices": {},
+            })
+            prices = item["fuel_prices"]
+            if isinstance(prices, dict):
+                prices[station.fuel_type] = station.price
+        provider_usage = {
+            provider: {
+                "quotas": usage.quotas,
+                "markets_approved": list(usage.markets_approved),
+                "markets_available": list(usage.markets_available),
+                "checked_at": usage.checked_at,
+            }
+            for provider, account in self._runtime.fuel.accounts.items()
+            if account.get("credential_id") in self._runtime.fuel.provider_usage
+            for usage in [self._runtime.fuel.provider_usage[account["credential_id"]]]
+        }
         return {
             "vehicle_id": self._vehicle_id,
             **self._runtime.fuel.status.get(self._vehicle_id, {"state": "idle"}),
-            "stations": [
-                {
-                    "station_id": station.station_id,
-                    "name": station.name,
-                    "price": station.price,
-                    "distance_km": station.distance_km,
-                    "address": station.address,
-                    "is_open": station.is_open,
-                    "provider": station.provider,
-                    "fuel_type": station.fuel_type,
-                    "brand": station.brand,
-                    "latitude": station.latitude,
-                    "longitude": station.longitude,
-                }
-                for station in stations
-            ],
+            "stations": list(station_data.values()),
+            "provider_usage": provider_usage,
         }
 
     async def async_update(self) -> None:

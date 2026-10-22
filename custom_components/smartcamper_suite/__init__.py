@@ -26,6 +26,7 @@ from .storage import SuiteStore
 PLATFORMS: list[str] = ["sensor"]
 SERVICE_SET_CREDENTIAL = "set_credential"
 SERVICE_REMOVE_CREDENTIAL = "remove_credential"
+SERVICE_REFRESH_FUEL = "refresh_fuel_stations"
 _CREDENTIAL_SCHEMA = vol.Schema({
     vol.Required("entry_id"): str,
     vol.Required("credential_id"): str,
@@ -36,6 +37,7 @@ _REMOVE_CREDENTIAL_SCHEMA = vol.Schema({
     vol.Required("entry_id"): str,
     vol.Required("credential_id"): str,
 })
+_REFRESH_FUEL_SCHEMA = vol.Schema({vol.Required("vehicle_id"): str})
 
 
 @dataclass(slots=True)
@@ -71,7 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         oauth_session = OAuth2Session(hass, entry, implementation)
         token = entry.data["token"].get("access_token")
         if isinstance(token, str) and token:
-            credentials.put_oauth("nakordoni-oauth", "nakordoni", token, set())
+            credentials.put_oauth("nakordoni-oauth", "nakordoni", token, set(), entry.data["token"].get("expires_at"), entry.data["token"].get("refresh_token"))
 
     async def transport(provider: str, url: str, params: dict[str, str], headers: dict[str, str]) -> ProviderResponse:
         """Perform one provider request through HA's shared aiohttp session."""
@@ -119,6 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if hasattr(hass, "services") and not hass.services.has_service(DOMAIN, SERVICE_SET_CREDENTIAL):
         hass.services.async_register(DOMAIN, SERVICE_SET_CREDENTIAL, _async_set_credential, _CREDENTIAL_SCHEMA)
         hass.services.async_register(DOMAIN, SERVICE_REMOVE_CREDENTIAL, _async_remove_credential, _REMOVE_CREDENTIAL_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_REFRESH_FUEL, _async_refresh_fuel, _REFRESH_FUEL_SCHEMA)
     await runtime.modules.async_setup(runtime)
     return True
 
@@ -144,6 +147,28 @@ async def _async_remove_credential(call: Any) -> None:
         call.hass.config_entries.async_update_entry(
             entry, data={**entry.data, "credentials": runtime.credentials.export_api_keys()}
         )
+
+
+async def _async_refresh_fuel(call: Any) -> None:
+    """Refresh one vehicle from its configured tracker without duplicating credentials."""
+    runtime = next(
+        (value for key, value in call.hass.data[DOMAIN].items() if key != "_frontend" and isinstance(value, SuiteRuntime)),
+        None,
+    )
+    if runtime is None:
+        return
+    vehicle = runtime.fuel.vehicles.get(call.data["vehicle_id"])
+    if vehicle is None or vehicle.tracker_entity_id is None:
+        return
+    state = call.hass.states.get(vehicle.tracker_entity_id)
+    if state is None:
+        return
+    try:
+        latitude = float(state.attributes["latitude"])
+        longitude = float(state.attributes["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return
+    await runtime.fuel.async_search(vehicle.vehicle_id, latitude, longitude)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

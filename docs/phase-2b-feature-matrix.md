@@ -6,7 +6,7 @@ einen HA-Fixture-Test oder einen Frontend-Test abgedeckt.
 
 | v0.8.4-Funktion | Suite-Kandidat | Nachweis/Abweichung |
 |---|---|---|
-| Tankstellenname, Marke | Nachgewiesen | FuelStation, Sensor und Card |
+| Tankstellenname, Marke | Nachgewiesen | FuelStation, Sensor und Card; Logo-URL plus Fallback |
 | Preis je ausgewähltem Kraftstoff | Nachgewiesen | Provider-Contract und Kartenrendering |
 | Mehrfach-Kraftstoffauswahl | Nachgewiesen | Fahrzeugprofil iteriert über fuel_types |
 | Diesel, E5, E10, LPG | Nachgewiesen | Capability-Contract; nur verifizierte Mappings |
@@ -21,14 +21,18 @@ einen HA-Fixture-Test oder einen Frontend-Test abgedeckt.
 | Provider nicht verfügbar | Nachgewiesen | Status/Error-State und Fallback-Contract |
 | Loading-/Empty-/Error-State | Nachgewiesen | Runtime-Statusmodell und Kartenrenderer |
 | Sortierung Distanz/Preis | Nachgewiesen | Runtime und Kartenrenderer unterstützen beide Sortiermodi |
-| Aktualisierung | Teilweise | Sensor-Updatepfad vorhanden; adaptive Bewegung folgt |
+| Highlights/Hervorhebungen | Nachgewiesen | Highlights-Layout verwendet die zwei priorisierten Ergebnisse |
+| Navigation | Nachgewiesen | Apple Maps, Google Maps, Waze oder automatischer Google-Fallback |
+| Anbieterlogos | Nachgewiesen | 60 verifizierte v0.8.4-PNG-Assets werden unter `/smartcamper_suite/logos/` statisch und idempotent ausgeliefert; unbekannte Marken haben einen Fallback |
+| Diagnostik/Quota-Anzeige | Teilweise | Secret-freie Usage-Projektion für Nakordoni; Providerfehler und unbekannte Quoten sichtbar |
+| Aktualisierung | Teilweise | Manuelle Karten-/Service-Aktualisierung und Sensorpfad; die historische automatische/bewegungsabhängige Koordination ist noch nicht vollständig portiert |
 | Persistenter Cache | Teilweise | Account-/Fahrzeug-Key und Deduplizierung; TTL folgt |
-| Rate-Limits/Credits | Contract vorhanden | 429/Provider-Ausfall klassifiziert; Telemetrie nicht vollständig |
-| Nakordoni OAuth2-PKCE | HA-Integration vorhanden | Exakte Stable-Implementierung/URLs, HA-Refresh-Lock und synthetische PKCE-Vertragsprüfung; E2E ohne Credential nicht durchgeführt |
-| Marktberechtigungen | Teilweise | markets_* aus Token-/Accountdaten steuern Auto-Auswahl; providerseitige Usage-Abfrage/Quota-Telemetrie folgt |
+| Rate-Limits/Credits | Teilweise nachgewiesen | 429/Provider-Ausfall, gemeinsamer Cache und Nakordoni-Usage/Quota; nicht dokumentierte Fremdquoten bleiben unbekannt |
+| Nakordoni OAuth2-PKCE | Nachgewiesen synthetisch | Exakte Stable-Implementierung/URLs, HA-Refresh-Lock und lokaler PKCE-/Revoke-Testserver; kein echter Providerzugang |
+| Marktberechtigungen | Teilweise | `markets_approved`/`markets_granted`/`markets_available`/`markets_allowed` werden ohne Annahmen ausgewertet; providerseitige Länder-/Quota-Policies bleiben dort unbekannt, wo die API sie nicht liefert |
 | Legacy-Config-Import | Nachgewiesen | Opt-in, idempotent, secret-frei, transaktionaler Commit und Rollback |
 | Legacy-Lovelace-Import | Preview-only | Karten werden nicht automatisch verändert |
-| Drei Lovelace-Modi | Teilweise | display_mode/editor vorhanden; historische Highlights-/Logo-/Diagnoseoptionen bleiben offen |
+| Drei Lovelace-Modi | Teilweise | display_mode, Layoutfamilien, Logos, Highlights, Navigation und Editor vorhanden; vollständige historische CSS-/Refresh-/Diagnostikparität bleibt offen |
 | Mehrere Karten/Fahrzeuge | Nachgewiesen | Explizite Fahrzeug-ID und getrennte Sensorattribute |
 
 ## Bewusste Grenzen

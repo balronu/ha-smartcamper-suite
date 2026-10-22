@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from math import isfinite
 from typing import Protocol
 
@@ -16,6 +16,7 @@ MAX_RADIUS_KM = 25.0
 TANKERKOENIG_URL = "https://creativecommons.tankerkoenig.de/json/list.php"
 PETROMAP_URL = "https://api.petromap.eu/v2/places"
 NAKORDONI_URL = "https://nakordoni.eu/api/v2/data/fuel-stations"
+NAKORDONI_ACCOUNT_USAGE_URL = "https://nakordoni.eu/api/v2/account/usage"
 
 
 class FuelError(RuntimeError):
@@ -73,6 +74,49 @@ class ProviderResponse:
     status: int
     payload: object
     headers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderUsage:
+    """Secret-free projection of provider-reported account usage."""
+
+    quotas: dict[str, dict[str, object]]
+    markets_approved: tuple[str, ...] = ()
+    markets_available: tuple[str, ...] = ()
+    checked_at: str | None = None
+
+    @property
+    def cheap_remaining(self) -> int | None:
+        value = self.quotas.get("cheap", {}).get("remaining")
+        return value if isinstance(value, int) else None
+
+
+def _market_codes(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        return ()
+    return tuple(sorted({item.strip().upper() for item in value if isinstance(item, str) and len(item.strip()) == 2}))
+
+
+def parse_nakordoni_usage(payload: object) -> ProviderUsage:
+    """Parse only fields from the documented account-usage response."""
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        raise FuelUnavailableError("nakordoni usage payload is invalid")
+    raw_quotas = data.get("quotas") if isinstance(data.get("quotas"), dict) else {}
+    quotas: dict[str, dict[str, object]] = {}
+    for name in ("cheap", "heavy", "route"):
+        raw = raw_quotas.get(name)
+        if not isinstance(raw, dict):
+            continue
+        quota = {key: raw[key] for key in ("limit", "used", "remaining", "reset_at") if key in raw and isinstance(raw[key], (int, str, type(None)))}
+        quotas[name] = quota
+    markets = data.get("markets") if isinstance(data.get("markets"), dict) else {}
+    return ProviderUsage(
+        quotas,
+        _market_codes(markets.get("approved")),
+        _market_codes(markets.get("available")),
+        datetime.now(UTC).isoformat(),
+    )
 
 
 Transport = Callable[[str, str, dict[str, str], dict[str, str]], Awaitable[ProviderResponse]]
@@ -278,6 +322,12 @@ class NakordoniAdapter(_Adapter):
             ))
         return result[: query.station_count]
 
+    async def async_get_account_usage(self, credential: str) -> ProviderUsage:
+        payload = await self._request("nakordoni", NAKORDONI_ACCOUNT_USAGE_URL, {}, credential)
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
+            raise FuelUnavailableError("nakordoni usage response is invalid")
+        return parse_nakordoni_usage(payload)
+
 
 class FuelProviderRegistry:
     """Registry-backed provider factory; credentials remain in CredentialStore."""
@@ -327,6 +377,9 @@ class FuelStationsRuntime:
         self._cache: dict[tuple[str, str, str, float, float, float, int], list[FuelStation]] = {}
         self._inflight: dict[tuple[str, str, str, float, float, float, int], asyncio.Task[list[FuelStation]]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self.provider_usage: dict[str, ProviderUsage] = {}
+        self._usage_checked: dict[str, datetime] = {}
+        self._usage_locks: dict[str, asyncio.Lock] = {}
 
     async def async_search(self, vehicle_id: str, latitude: float, longitude: float) -> list[FuelStation]:
         vehicle = self.vehicles.get(vehicle_id)
@@ -360,6 +413,10 @@ class FuelStationsRuntime:
                 if key in self._cache:
                     combined.extend(self._cache[key])
                     break
+                await self._maybe_update_usage(provider, credential_id, credential)
+                usage = self.provider_usage.get(credential_id) if provider == "nakordoni" else None
+                if usage is not None and usage.cheap_remaining == 0:
+                    continue
                 task = self._inflight.get(key)
                 if task is None:
                     task = asyncio.create_task(self._fetch(credential_id, provider, query, credential, key))
@@ -388,6 +445,22 @@ class FuelStationsRuntime:
         }
         return sorted_stations[: vehicle.fuel_station_count]
 
+    async def _maybe_update_usage(self, provider: str, credential_id: str, credential: str) -> None:
+        if provider != "nakordoni":
+            return
+        lock = self._usage_locks.setdefault(credential_id, asyncio.Lock())
+        async with lock:
+            checked = self._usage_checked.get(credential_id)
+            if checked and datetime.now(UTC) - checked < timedelta(minutes=15):
+                return
+            self._usage_checked[credential_id] = datetime.now(UTC)
+            try:
+                usage_method = getattr(self.registry.adapter(provider), "async_get_account_usage", None)
+                if callable(usage_method):
+                    self.provider_usage[credential_id] = await usage_method(credential)
+            except (FuelAuthError, FuelRateLimitError, FuelUnavailableError):
+                return
+
     async def _fetch(self, credential_id: str, provider: str, query: FuelSearchQuery, credential: str, key: tuple) -> list[FuelStation]:
         lock = self._locks.setdefault(credential_id, asyncio.Lock())
         async with lock:
@@ -404,3 +477,4 @@ class FuelStationsRuntime:
             await asyncio.gather(*self._inflight.values(), return_exceptions=True)
         self._inflight.clear()
         self._locks.clear()
+        self._usage_locks.clear()

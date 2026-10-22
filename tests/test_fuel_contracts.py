@@ -116,6 +116,8 @@ def test_shared_account_deduplicates_concurrent_requests_and_respects_market_pol
             nonlocal calls
             calls += 1
             await asyncio.sleep(0)
+            if "account/usage" in _url:
+                return ProviderResponse(200, {"ok": True, "data": {"quotas": {"cheap": {"limit": 10, "used": 1, "remaining": 9}}, "markets": {"approved": ["DE"], "available": ["DE"]}}})
             return ProviderResponse(200, {"ok": True, "data": {"stations": [{
                 "station_ref": "n1", "name": "Nako", "distance_km": 1.0,
                 "prices": {"diesel": {"price": 1.7}},
@@ -133,7 +135,8 @@ def test_shared_account_deduplicates_concurrent_requests_and_respects_market_pol
             runtime.async_search(vehicle.vehicle_id, 50.0, 8.0),
         )
         assert first[0].station_id == second[0].station_id == "n1"
-        assert calls == 1
+        assert calls == 2
+        assert runtime.provider_usage["nkd"].cheap_remaining == 9
         await runtime.async_unload()
 
     asyncio.run(run())

@@ -3,8 +3,22 @@ export type CardConfig = {
   module: string;
   vehicle_id?: string;
   display_mode?: "detailed" | "compact" | "individual";
+  custom_layout?: "list" | "highlights_list" | "configured_list";
   sort_mode?: "distance" | "price";
+  sort_fuel?: string;
   visible_station_count?: number;
+  navigation?: boolean;
+  navigation_provider?: "auto" | "apple" | "google" | "waze";
+  show_brand_logos?: boolean;
+  logo_path?: string;
+  show_title?: boolean;
+  show_station_count?: boolean;
+  show_last_updated?: boolean;
+  show_provider?: boolean;
+  show_diagnostics?: boolean;
+  show_refresh?: boolean;
+  fetch_mode?: "automatic" | "manual";
+  show_badges?: boolean;
   show_address?: boolean;
   show_distance?: boolean;
   show_prices?: boolean;
@@ -22,12 +36,14 @@ export type FuelStationView = {
   fuel_type?: string;
   fuel_prices?: Record<string, number | null>;
   brand?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  price_stale?: boolean;
 };
 
-export function selectVehicle(
-  config: CardConfig,
-  states: Record<string, { attributes?: { vehicle_id?: string } }>,
-): string | undefined {
+export const DEFAULT_LOGO_PATH = "/smartcamper_suite/logos/";
+
+export function selectVehicle(config: CardConfig, states: Record<string, { attributes?: { vehicle_id?: string } }>): string | undefined {
   if (config.vehicle_id) return config.vehicle_id;
   return Object.values(states).find((state) => state.attributes?.vehicle_id)?.attributes?.vehicle_id;
 }
@@ -38,39 +54,66 @@ export function escapeHtml(value: string): string {
   } as Record<string, string>)[character] ?? character);
 }
 
-export function renderFuelStationsHtml(
-  stations: FuelStationView[],
-  config: CardConfig,
-): string {
+function normalizedBrand(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+export function buildBrandLogoUrl(brand: unknown, logoPath: unknown = DEFAULT_LOGO_PATH): string | null {
+  const key = normalizedBrand(brand);
+  const base = String(logoPath ?? DEFAULT_LOGO_PATH).trim().replace(/\/+$/, "");
+  return key && base ? `${base}/${encodeURIComponent(key)}.png` : null;
+}
+
+export function buildNavigationUrl(latitude: unknown, longitude: unknown, provider: CardConfig["navigation_provider"] = "auto", label = "Tankstelle"): string | null {
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const destination = `${lat},${lon}`;
+  if (provider === "apple") return `https://maps.apple.com/?daddr=${encodeURIComponent(destination)}&dirflg=d`;
+  if (provider === "google") return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+  if (provider === "waze") return `https://waze.com/ul?ll=${encodeURIComponent(destination)}&navigate=yes`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&destination_place_id=${encodeURIComponent(label)}`;
+}
+
+export function prioritizeStations(stations: FuelStationView[], sortMode: CardConfig["sort_mode"] = "distance"): FuelStationView[] {
+  return [...stations].sort((left, right) => {
+    const leftValue = sortMode === "price" ? left.price : left.distance_km;
+    const rightValue = sortMode === "price" ? right.price : right.distance_km;
+    return (leftValue ?? Number.POSITIVE_INFINITY) - (rightValue ?? Number.POSITIVE_INFINITY)
+      || String(left.station_id).localeCompare(String(right.station_id));
+  });
+}
+
+export function renderFuelStationsHtml(stations: FuelStationView[], config: CardConfig): string {
   const mode = config.display_mode ?? "detailed";
   if (!stations.length) return `<p class="fuel-empty">Keine Tankstellen verfügbar</p>`;
-  const sorted = [...stations].sort((left, right) => {
-    const leftValue = config.sort_mode === "price" ? left.price : left.distance_km;
-    const rightValue = config.sort_mode === "price" ? right.price : right.distance_km;
-    return (leftValue ?? Number.POSITIVE_INFINITY) - (rightValue ?? Number.POSITIVE_INFINITY);
-  });
+  const sorted = prioritizeStations(stations, config.sort_mode);
   const visible = Number.isInteger(config.visible_station_count) && (config.visible_station_count ?? 0) > 0
-    ? sorted.slice(0, config.visible_station_count)
-    : sorted;
-  return visible.map((station) => {
+    ? sorted.slice(0, config.visible_station_count) : sorted;
+  const highlightIds = config.custom_layout === "highlights_list" ? new Set(sorted.slice(0, 2).map((station) => station.station_id)) : new Set<string>();
+  const renderStation = (station: FuelStationView, highlight = false): string => {
     const prices = station.fuel_prices
       ? Object.entries(station.fuel_prices).map(([fuel, value]) => `${fuel.toUpperCase()}: ${value == null ? "–" : `${value.toFixed(3)} €`}`).join(" · ")
       : station.price == null ? "–" : `${station.price.toFixed(3)} €`;
-    const price = config.show_prices === false ? "" : `<b>${prices}</b>`;
+    const price = config.show_prices === false ? "" : `<b class="prices">${prices}</b>`;
     const distance = config.show_distance === false ? "" : `<em>${station.distance_km == null ? "–" : `${station.distance_km.toFixed(1)} km`}</em>`;
     const address = config.show_address === false ? "" : `<small>${escapeHtml(station.address ?? "")}</small>`;
     const status = config.show_status === false ? "" : `<span>${station.is_open === false ? "Geschlossen" : "Offen/unbekannt"}</span>`;
-    return `<li class="fuel-station ${mode}"><strong>${escapeHtml(station.name)}</strong>${price}${distance}${address}${status}</li>`;
-  }).join("");
+    const logoUrl = config.show_brand_logos !== false ? buildBrandLogoUrl(station.brand, config.logo_path) : null;
+    const logo = logoUrl ? `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(station.brand ?? "")} Logo" />` : `<span class="brand-logo-fallback" aria-hidden="true">⛽</span>`;
+    const navigation = config.navigation !== false ? buildNavigationUrl(station.latitude, station.longitude, config.navigation_provider, station.name) : null;
+    const navigate = navigation ? `<a class="navigate" href="${escapeHtml(navigation)}" target="_blank" rel="noopener noreferrer" aria-label="Navigieren">↗</a>` : "";
+    const badge = config.show_badges !== false && highlight ? `<span class="badge">Highlight</span>` : "";
+    return `<li class="fuel-station ${mode}${highlight ? " highlight" : ""}" data-station-id="${escapeHtml(station.station_id)}">${logo}<div class="station-main"><strong>${escapeHtml(station.name)}</strong>${badge}${address}<div class="meta">${status}${distance}</div></div>${price}${navigate}</li>`;
+  };
+  const highlights = config.custom_layout === "highlights_list" ? sorted.slice(0, 2).map((station) => renderStation(station, true)).join("") : "";
+  const remaining = config.custom_layout === "highlights_list" ? visible.filter((station) => !highlightIds.has(station.station_id)) : visible;
+  return `${highlights ? `<section class="highlights" aria-label="Highlights">${highlights}</section>` : ""}<ul class="stations">${remaining.map((station) => renderStation(station)).join("")}</ul>`;
 }
 
-export function renderFuelStateHtml(
-  status: string | undefined,
-  stations: FuelStationView[],
-  config: CardConfig,
-): string {
-  if (status === "loading") return "<p class=\"fuel-loading\">Lade Tankstellen …</p>";
-  if (status === "error") return "<p class=\"fuel-error\">Tankstellen konnten nicht geladen werden.</p>";
+export function renderFuelStateHtml(status: string | undefined, stations: FuelStationView[], config: CardConfig): string {
+  if (status === "loading") return "<p class=\"fuel-loading\" role=\"status\">Lade Tankstellen …</p>";
+  if (status === "error") return "<p class=\"fuel-error\" role=\"alert\">Tankstellen konnten nicht geladen werden.</p>";
   return renderFuelStationsHtml(stations, config);
 }
 

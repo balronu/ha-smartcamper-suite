@@ -23,6 +23,7 @@ class CredentialRecord:
     scopes: frozenset[str] = frozenset()
     expires_at: str | None = None
     _secret: str | None = field(default=None, repr=False)
+    _refresh_token: str | None = field(default=None, repr=False)
 
     def public_status(self) -> dict[str, Any]:
         return {"credential_id": self.credential_id, "provider": self.provider,
@@ -42,10 +43,10 @@ class CredentialStore:
             raise ValueError("api key must not be empty")
         self._records[credential_id] = CredentialRecord(credential_id, provider, "api_key", CredentialState.VALID, _secret=api_key)
 
-    def put_oauth(self, credential_id: str, provider: str, access_token: str, scopes: set[str], expires_at: str | None = None) -> None:
+    def put_oauth(self, credential_id: str, provider: str, access_token: str, scopes: set[str], expires_at: str | None = None, refresh_token: str | None = None) -> None:
         if not access_token.strip():
             raise ValueError("access token must not be empty")
-        self._records[credential_id] = CredentialRecord(credential_id, provider, "oauth2", CredentialState.VALID, frozenset(scopes), expires_at, access_token)
+        self._records[credential_id] = CredentialRecord(credential_id, provider, "oauth2", CredentialState.VALID, frozenset(scopes), expires_at, access_token, refresh_token)
 
     def get_secret(self, credential_id: str) -> str | None:
         record = self._records.get(credential_id)
@@ -102,9 +103,9 @@ class CredentialStore:
                 raise ValueError("OAuth credential is not configured")
             if current._secret != previous_token and current.expires_at:
                 return current._secret
-            token, expires_at = await refresh(current._secret)
+            token, expires_at = await refresh(current._refresh_token or current._secret)
             self._records[credential_id] = CredentialRecord(
                 credential_id, current.provider, "oauth2", CredentialState.VALID,
-                current.scopes, expires_at, token,
+                current.scopes, expires_at, token, current._refresh_token,
             )
             return token

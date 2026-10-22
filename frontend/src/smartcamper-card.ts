@@ -1,4 +1,5 @@
 import {
+  type FuelStationView,
   type CardConfig,
   renderFuelStateHtml,
   selectVehicle,
@@ -6,7 +7,7 @@ import {
 } from "./config";
 
 type HassState = { state?: string; attributes?: Record<string, unknown> };
-type HassLike = { states?: Record<string, HassState> };
+type HassLike = { states?: Record<string, HassState>; callService?: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown> };
 
 class SmartCamperCard extends HTMLElement {
   private config: CardConfig = { type: "custom:smartcamper-card", module: "travel_journal" };
@@ -36,20 +37,29 @@ class SmartCamperCard extends HTMLElement {
         <option value="border_forecast">Wartezeiten Forecast</option>
       </select></label>
       <label>Fahrzeug <input data-field="vehicle_id" placeholder="Fahrzeug-ID (optional)" /></label>
+      <label>Darstellung <select data-field="display_mode"><option value="detailed">Detailed</option><option value="compact">Compact</option><option value="individual">Individual</option></select></label>
+      <label>Layout <select data-field="custom_layout"><option value="list">Liste</option><option value="highlights_list">Highlights + Liste</option><option value="configured_list">Konfiguriert</option></select></label>
       <label>Sortierung <select data-field="sort_mode"><option value="distance">Entfernung</option><option value="price">Preis</option></select></label>
       <label>Anzahl <input data-field="visible_station_count" type="number" min="0" /></label>
+      <label>Navigation <select data-field="navigation_provider"><option value="auto">Automatisch</option><option value="apple">Apple</option><option value="google">Google</option><option value="waze">Waze</option></select></label>
       <label><input data-field="show_prices" type="checkbox" checked /> Preise</label>
       <label><input data-field="show_distance" type="checkbox" checked /> Entfernung</label>
       <label><input data-field="show_address" type="checkbox" checked /> Adresse</label>
-      <label><input data-field="show_status" type="checkbox" checked /> Status</label>`;
+      <label><input data-field="show_status" type="checkbox" checked /> Status</label>
+      <label><input data-field="show_brand_logos" type="checkbox" checked /> Anbieterlogos</label>
+      <label><input data-field="show_diagnostics" type="checkbox" checked /> Diagnostik</label>
+      <label><input data-field="show_refresh" type="checkbox" checked /> Aktualisieren</label>`;
     const emit = (): void => {
       const module = (editor.querySelector("[data-field=module]") as HTMLSelectElement).value;
       const vehicle_id = (editor.querySelector("[data-field=vehicle_id]") as HTMLInputElement).value || undefined;
       const sort_mode = (editor.querySelector("[data-field=sort_mode]") as HTMLSelectElement).value as "distance" | "price";
+      const display_mode = (editor.querySelector("[data-field=display_mode]") as HTMLSelectElement).value as CardConfig["display_mode"];
+      const custom_layout = (editor.querySelector("[data-field=custom_layout]") as HTMLSelectElement).value as CardConfig["custom_layout"];
+      const navigation_provider = (editor.querySelector("[data-field=navigation_provider]") as HTMLSelectElement).value as CardConfig["navigation_provider"];
       const visible_station_count = Number((editor.querySelector("[data-field=visible_station_count]") as HTMLInputElement).value) || 0;
       const bool = (field: string): boolean => (editor.querySelector(`[data-field=${field}]`) as HTMLInputElement).checked;
       editor.dispatchEvent(new CustomEvent("config-changed", {
-        bubbles: true, composed: true, detail: { config: { ...this.config, module, vehicle_id, sort_mode, visible_station_count, show_prices: bool("show_prices"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status") } },
+        bubbles: true, composed: true, detail: { config: { ...this.config, module, vehicle_id, display_mode, custom_layout, sort_mode, navigation_provider, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } },
       }));
     };
     editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", emit));
@@ -73,10 +83,31 @@ class SmartCamperCard extends HTMLElement {
     const states = this._hass?.states ?? {};
     const vehicleId = selectVehicle(this.config, states);
     const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId);
-    const status = sensor?.attributes?.state;
-    const stations = (sensor?.attributes?.stations ?? []) as Parameters<typeof renderFuelStateHtml>[1];
-    const stationHtml = renderFuelStateHtml(status as string | undefined, stations, this.config);
-    this.innerHTML = `<article class="fuel-card"><header><strong>Tankstellen</strong><small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small></header><div>${stationHtml}</div></article>`;
+    const status = sensor?.attributes?.state as string | undefined;
+    const stations = this.mergeStations((sensor?.attributes?.stations ?? []) as FuelStationView[]);
+    const stationHtml = renderFuelStateHtml(status, stations, this.config);
+    const usage = sensor?.attributes?.provider_usage as Record<string, { quotas?: Record<string, { remaining?: number }> }> | undefined;
+    const usageText = usage ? Object.entries(usage).map(([provider, value]) => `${provider}: ${value.quotas?.cheap?.remaining ?? "?"} verbleibend`).join(" · ") : "";
+    const diagnostics = this.config.show_diagnostics !== false && (sensor?.attributes?.error || usageText)
+      ? `<p class="diagnostics" role="status">${sensor?.attributes?.error ? `Providerfehler: ${String(sensor.attributes.error)}` : ""}${usageText ? ` ${usageText}` : ""}</p>` : "";
+    const lastUpdated = this.config.show_last_updated !== false && sensor?.attributes?.updated_at
+      ? `<small class="updated">Stand: ${String(sensor.attributes.updated_at)}</small>` : "";
+    const refresh = this.config.show_refresh !== false && this.config.fetch_mode === "manual"
+      ? `<button class="refresh" type="button">Jetzt aktualisieren</button>` : "";
+    this.innerHTML = `<article class="fuel-card"><header>${this.config.show_title === false ? "" : "<strong>Tankstellen</strong>"}<small>${vehicleId ?? "Kein Fahrzeug ausgewählt"}</small>${lastUpdated}${refresh}</header>${diagnostics}<div>${stationHtml}</div></article>`;
+    this.querySelector(".refresh")?.addEventListener("click", () => {
+      if (vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "refresh_fuel_stations", { vehicle_id: vehicleId });
+    });
+  }
+
+  private mergeStations(raw: FuelStationView[]): FuelStationView[] {
+    const merged = new Map<string, FuelStationView>();
+    for (const station of raw) {
+      const current = merged.get(station.station_id);
+      if (!current) { merged.set(station.station_id, { ...station, fuel_prices: station.fuel_type ? { [station.fuel_type]: station.price ?? null } : station.fuel_prices }); continue; }
+      current.fuel_prices = { ...(current.fuel_prices ?? {}), ...(station.fuel_type ? { [station.fuel_type]: station.price ?? null } : station.fuel_prices ?? {}) };
+    }
+    return [...merged.values()];
   }
 }
 

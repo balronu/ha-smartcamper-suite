@@ -27,6 +27,7 @@ set_credential:
       selector:
         text:
           type: password
+
 remove_credential:
   name: Remove provider credential
   description: Remove one shared provider credential from the Suite runtime.
@@ -42,3 +43,12 @@ remove_credential:
       selector:
         text:
 
+refresh_fuel_stations:
+  name: Refresh fuel stations
+  description: Refresh one vehicle using its configured GPS tracker and shared provider credentials.
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      required: true
+      selector:
+        text:

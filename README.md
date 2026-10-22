@@ -13,8 +13,10 @@ versioned suite storage, four isolated module runtimes, and the foundation for
 The `fuel_stations` module now provides offline-testable Tankerkönig, Petromap
 and Nakordoni adapters, vehicle-scoped search settings, shared provider
 credentials, provider fallback, per-vehicle sensors and the fuel-stations view
-in `custom:smartcamper-card`. OAuth refresh and legacy migration are tested as
-isolated candidate paths; no legacy entry is changed automatically.
+in `custom:smartcamper-card`. The card includes multi-fuel prices, sorting,
+highlights, navigation, provider logos, diagnostics and manual refresh. OAuth
+refresh and legacy migration are tested as isolated candidate paths; no legacy
+entry is changed automatically.
 
 This is still development code. It does not open or migrate a productive
 database, use real credentials, perform live API calls in tests, or install
@@ -32,6 +34,7 @@ python -m pytest
 python -m compileall custom_components tests
 ruff check .
 cd frontend && npm ci && npm test && npm run build
+npm run browser:test
 ```
 
 See [README.en.md](README.en.md), [docs/architecture.md](docs/architecture.md)

@@ -1,6 +1,9 @@
 # SmartCamper Suite
 
-**Phase 2D development — not a production release.**
+**Pre-release: v0.3.0-beta.1 — controlled test beta.**
+
+The Stable integrations remain the production reference. This beta is intended
+only for an isolated, controlled Home Assistant test.
 
 <p align="center"><img src="docs/assets/smartcamper-suite-logo-set.png" alt="SmartCamper Suite logo set" width="720"></p>
 
@@ -12,6 +15,18 @@ SmartCamper Suite is one modular Home Assistant custom integration using the
 boundaries, credential status handling, offline-testable API policies,
 versioned isolated storage, four independent module runtimes, and the
 foundation for `custom:smartcamper-card`.
+
+### HACS test installation
+
+The beta can be installed through **HACS → Integrations → Custom repositories**.
+Add `https://github.com/balronu/ha-smartcamper-suite` as an **Integration**,
+enable pre-releases, and select `v0.3.0-beta.1`. Restart Home Assistant and
+add the Suite as a separate Config Entry under **Settings → Devices & services**.
+Existing Stable integrations are not replaced or removed.
+
+Use only synthetic or explicitly approved provider data for the first test. A
+real legacy journal import is not part of installation; only the dry-run is
+allowed initially.
 
 The `fuel_stations` module now contains offline-testable Tankerkönig, Petromap
 and Nakordoni adapters, vehicle-scoped search settings, shared provider

@@ -12,6 +12,7 @@ from custom_components.smartcamper_suite.config_flow import SmartCamperConfigFlo
 from custom_components.smartcamper_suite.const import DEFAULT_MODULES, DOMAIN, ModuleName
 from custom_components.smartcamper_suite.frontend import (
     LOGO_URL,
+    RESOURCE_PATH,
     RESOURCE_URL,
     async_register_frontend,
     async_unregister_frontend,
@@ -243,7 +244,7 @@ def test_frontend_registration_is_idempotent_across_reload():
 
         hass.http.async_register_static_paths = register
         await async_register_frontend(hass)
-        assert [config.url_path for config in static_calls[0]] == [RESOURCE_URL, LOGO_URL]
+        assert [config.url_path for config in static_calls[0]] == [RESOURCE_PATH, LOGO_URL]
         await async_unregister_frontend(hass)
         await async_register_frontend(hass)
         assert len(static_calls) == 1

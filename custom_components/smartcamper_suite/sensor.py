@@ -16,6 +16,7 @@ async def async_setup_entry(
     async_add_entities(
         [FuelStationsSensor(runtime, vehicle_id) for vehicle_id in runtime.fuel.vehicles]
         + [RoutePlannerSensor(runtime, vehicle_id) for vehicle_id in runtime.route.vehicles]
+        + [JournalSensor(runtime, vehicle_id) for vehicle_id in runtime.journal.vehicles]
     )
 
 
@@ -95,6 +96,37 @@ class FuelStationsSensor(SensorEntity):
         await self._runtime.fuel.async_search(self._vehicle_id, latitude, longitude)
         self.async_write_ha_state()
 
+
+class JournalSensor(SensorEntity):
+    """One non-invasive journal summary entity per central Suite vehicle."""
+
+    _attr_should_poll = True
+    _attr_native_unit_of_measurement = "trips"
+
+    def __init__(self, runtime: SuiteRuntime, vehicle_id: str) -> None:
+        self._runtime = runtime
+        self._vehicle_id = vehicle_id
+        self._summary: dict[str, object] = {}
+        self._attr_name = f"{runtime.journal.vehicles[vehicle_id].name} Reisetagebuch"
+        self._attr_unique_id = f"{vehicle_id}_travel_journal"
+
+    async def async_update(self) -> None:
+        self._summary = await self.hass.async_add_executor_job(self._runtime.journal.store.summary, self._vehicle_id)
+
+    @property
+    def native_value(self) -> int:
+        return int(self._summary.get("trip_count", 0))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return {
+            "vehicle_id": self._vehicle_id,
+            "active_trip_count": self._summary.get("active_trip_count", 0),
+            "active_trip": self._summary.get("active_trip"),
+            "expense_total_minor": self._summary.get("expense_total_minor", 0),
+            "gps_point_count": self._summary.get("gps_point_count", 0),
+            "database": "smartcamper_suite_travel_journal.sqlite",
+        }
 
 class RoutePlannerSensor(SensorEntity):
     """Expose the last explicit route without starting background work."""

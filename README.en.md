@@ -1,6 +1,6 @@
 # SmartCamper Suite
 
-**Phase 2C development — not a production release.**
+**Phase 2D development — not a production release.**
 
 <p align="center"><img src="docs/assets/smartcamper-suite-logo-set.png" alt="SmartCamper Suite logo set" width="720"></p>
 
@@ -32,6 +32,16 @@ Nakordoni motorhome routing is not presented as legally validated navigation;
 automatic background routing is intentionally disabled. Details are in
 [docs/phase-2c-route-planner-plan.md](docs/phase-2c-route-planner-plan.md).
 
+The `travel_journal` module also uses only the central vehicle profiles. It
+provides the core trip, stay, stop and expense operations, vehicle-scoped
+journal sensors, and a separate versioned SQLite file. Legacy import is only
+available through explicit opt-in preview/import operations with SHA-256
+idempotency; the old database is opened read-only and never changed
+automatically. The Stable feature matrix and intentionally open adapters are
+documented in [docs/phase-2d-travel-journal-plan.md](docs/phase-2d-travel-journal-plan.md).
+The first isolated Home Assistant practical-test preparation is documented in
+[docs/phase-2d-home-assistant-practical-test.md](docs/phase-2d-home-assistant-practical-test.md).
+
 The QA report and current merge gates are documented in
 [docs/phase-2a-qa.md](docs/phase-2a-qa.md).
 The Phase 2B implementation plan and deviations are documented in
@@ -43,7 +53,7 @@ The detailed v0.8.4 comparison is documented in
 
 | Module | Illustration | Status |
 |---|---|---|
-| Camper Travel Journal | [Travel journal](docs/assets/module-travel-journal.svg) | Placeholder; not implemented in Phase 2B |
+| Camper Travel Journal | [Travel journal](docs/assets/module-travel-journal.svg) | Phase 2D core functions; tested offline |
 | Mobile Fuel Stations | [Fuel stations](docs/assets/module-fuel-stations.svg) | Phase 2B candidate; tested offline |
 | Camper Route Planner | [Route planning](docs/assets/module-route-planner.svg) | Phase 2C candidate; tested offline |
 | Wartezeiten Forecast | [Border wait times](docs/assets/module-border-forecast.svg) | Placeholder; not implemented in Phase 2B |

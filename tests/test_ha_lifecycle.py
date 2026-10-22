@@ -43,11 +43,15 @@ def test_home_assistant_setup_unload_closes_store_and_preserves_module_isolation
         assert runtime.modules.modules[ModuleName.ROUTE_PLANNER].started
         assert not runtime.modules.modules[ModuleName.FUEL_STATIONS].started
         assert (tmp_path / ".storage" / "smartcamper_suite.sqlite").is_file()
+        assert (tmp_path / ".storage" / "smartcamper_suite_travel_journal.sqlite").is_file()
 
         connection = runtime.store.connection
+        journal_connection = runtime.journal.store.connection
         assert await async_unload_entry(hass, entry)
         with pytest.raises(sqlite3.ProgrammingError):
             connection.execute("SELECT 1")
+        with pytest.raises(sqlite3.ProgrammingError):
+            journal_connection.execute("SELECT 1")
 
     asyncio.run(run())
 

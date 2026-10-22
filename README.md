@@ -1,6 +1,6 @@
 # SmartCamper Suite
 
-**Phase 2C development — not a production release.**
+**Phase 2D development — not a production release.**
 
 <p align="center"><img src="docs/assets/smartcamper-suite-logo-set.png" alt="SmartCamper Suite Logo-Set" width="720"></p>
 
@@ -35,11 +35,24 @@ Navigation dargestellt; automatische Hintergrundberechnung ist absichtlich
 deaktiviert. Details stehen in
 [docs/phase-2c-route-planner-plan.md](docs/phase-2c-route-planner-plan.md).
 
+Das `travel_journal`-Modul verwendet ebenfalls ausschließlich die zentralen
+Fahrzeugprofile. Es bietet die grundlegenden Reise-, Aufenthalts-,
+Zwischenstopp- und Kostenoperationen, fahrzeugbezogene Journal-Sensoren und
+eine getrennte, versionierte SQLite-Datei. Ein Legacy-Import ist nur als
+expliziter Opt-in-Dry-Run beziehungsweise Import mit SHA-256-Idempotenz
+möglich; die alte Datenbank wird read-only geöffnet und nie automatisch
+verändert. Die vollständige Stable-Matrix und die bewusst noch offenen
+Adapter sind in [docs/phase-2d-travel-journal-plan.md](docs/phase-2d-travel-journal-plan.md)
+beschrieben.
+
+Die Vorbereitung des ersten isolierten HA-Praxistests steht in
+[docs/phase-2d-home-assistant-practical-test.md](docs/phase-2d-home-assistant-practical-test.md).
+
 ## Module
 
 | Modul | Darstellung | Status |
 |---|---|---|
-| Camper Travel Journal | [Reisetagebuch](docs/assets/module-travel-journal.svg) | Platzhalter, Phase 2B nicht implementiert |
+| Camper Travel Journal | [Reisetagebuch](docs/assets/module-travel-journal.svg) | Phase-2D-Grundfunktionen, offline getestet |
 | Mobile Fuel Stations | [Tankstellen](docs/assets/module-fuel-stations.svg) | Phase-2B-Kandidat, offline getestet |
 | Camper Route Planner | [Routenplanung](docs/assets/module-route-planner.svg) | Phase-2C-Kandidat, offline getestet |
 | Wartezeiten Forecast | [Grenzwartezeiten](docs/assets/module-border-forecast.svg) | Platzhalter, Phase 2B nicht implementiert |
@@ -65,3 +78,6 @@ The detailed v0.8.4 comparison is in
 [docs/phase-2b-feature-matrix.md](docs/phase-2b-feature-matrix.md).
 The QA status and remaining merge gates are in
 [docs/phase-2a-qa.md](docs/phase-2a-qa.md).
+The Travel Journal Stable inventory, isolated database design and opt-in
+legacy import boundary are in
+[docs/phase-2d-travel-journal-plan.md](docs/phase-2d-travel-journal-plan.md).

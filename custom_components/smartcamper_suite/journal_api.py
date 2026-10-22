@@ -31,12 +31,17 @@ def async_register(hass: Any) -> None:
             raise TypeError("entry_not_loaded")
         return selected
 
-    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/list", "vehicle_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/list", "vehicle_id": str, vol.Optional("trip_id"): str, vol.Optional("entry_id"): str})
     @websocket_api.async_response
     async def ws_list(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
         selected = runtime(msg)
-        result = await hass.async_add_executor_job(selected.journal.store.list_trips, msg["vehicle_id"])
-        connection.send_result(msg["id"], {"trips": result, "summary": await hass.async_add_executor_job(selected.journal.store.summary, msg["vehicle_id"])})
+        vehicle_id = msg["vehicle_id"]
+        trip_id = msg.get("trip_id")
+        result = await hass.async_add_executor_job(selected.journal.store.list_trips, vehicle_id)
+        related = await hass.async_add_executor_job(selected.journal.store.list_related, vehicle_id, trip_id)
+        drives = await hass.async_add_executor_job(selected.journal.store.list_drives, vehicle_id, trip_id)
+        suggestions = await hass.async_add_executor_job(selected.journal.store.list_suggestions, vehicle_id)
+        connection.send_result(msg["id"], {"trips": result, "summary": await hass.async_add_executor_job(selected.journal.store.summary, vehicle_id), **related, "drives": drives, "suggestions": suggestions})
 
     @websocket_api.websocket_command({"type": "smartcamper_suite/journal/create_trip", "vehicle_id": str, "title": str, vol.Optional("entry_id"): str, vol.Optional("description", default=""): str, vol.Optional("destination", default=""): str, vol.Optional("status", default="planned"): str})
     @websocket_api.async_response
@@ -53,13 +58,13 @@ def async_register(hass: Any) -> None:
         preview = await hass.async_add_executor_job(selected.journal.store.analyze_gpx, data, msg["vehicle_id"])
         connection.send_result(msg["id"], preview)
 
-    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/import_gpx", "vehicle_id": str, "content_base64": str, vol.Optional("trip_id"): str, vol.Optional("entry_id"): str})
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/import_gpx", "vehicle_id": str, "content_base64": str, vol.Optional("trip_id"): str, vol.Optional("drive_keys", default=[]): [str], vol.Optional("entry_id"): str})
     @websocket_api.async_response
     async def ws_import_gpx(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
         selected = runtime(msg)
         data = base64.b64decode(msg["content_base64"], validate=True)
         preview = await hass.async_add_executor_job(selected.journal.store.analyze_gpx, data, msg["vehicle_id"])
-        result = await hass.async_add_executor_job(selected.journal.store.import_gpx, preview, msg.get("trip_id"))
+        result = await hass.async_add_executor_job(selected.journal.store.import_gpx, preview, msg.get("trip_id"), msg.get("drive_keys"))
         connection.send_result(msg["id"], result)
 
     @websocket_api.websocket_command({"type": "smartcamper_suite/journal/export_pdf", "vehicle_id": str, "trip_id": str, vol.Optional("language", default="de"): str, vol.Optional("entry_id"): str})
@@ -171,12 +176,13 @@ def async_register(hass: Any) -> None:
         await hass.async_add_executor_job(selected.journal.store.update_trip, msg["trip_id"], status=msg["status"])
         connection.send_result(msg["id"], {"status": msg["status"]})
 
-    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/route", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("drive_ids"): [str]})
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/route", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("drive_ids"): [str], vol.Optional("max_points", default=5000): int, vol.Optional("simplify_tolerance_m", default=0.0): float})
     @websocket_api.async_response
     async def ws_route(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
         selected = runtime(msg)
         result = await hass.async_add_executor_job(selected.journal.store.route_segments, msg["vehicle_id"], msg.get("trip_id"), msg.get("drive_ids"))
-        connection.send_result(msg["id"], {"segments": result})
+        points = sum(len(segment["points"]) for segment in result)
+        connection.send_result(msg["id"], {"segments": result, "vehicle_id": msg["vehicle_id"], "trip_id": msg.get("trip_id"), "total_points": points, "truncated": False, "simplify_tolerance_m": msg.get("simplify_tolerance_m", 0.0)})
 
     @websocket_api.websocket_command({"type": "smartcamper_suite/journal/list_drives", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str})
     @websocket_api.async_response

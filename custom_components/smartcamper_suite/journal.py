@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
-JOURNAL_SCHEMA_VERSION = 2
+JOURNAL_SCHEMA_VERSION = 3
 TRIP_STATUSES = {"planned", "active", "completed", "cancelled"}
 EXPENSE_CATEGORIES = {"camping", "fuel", "toll", "parking", "food", "activities", "other"}
 
@@ -102,7 +102,15 @@ class JournalStore:
                   id TEXT PRIMARY KEY, vehicle_id TEXT NOT NULL, started_at TEXT NOT NULL,
                   ended_at TEXT NOT NULL, distance_m REAL, source TEXT NOT NULL DEFAULT 'manual',
                   start_label TEXT, end_label TEXT, manual_distance_km REAL,
-                  created_at TEXT NOT NULL
+                  end_reason TEXT, start_latitude REAL, start_longitude REAL,
+                  end_latitude REAL, end_longitude REAL, created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS drive_gps_points(
+                  drive_id TEXT NOT NULL REFERENCES drives(id) ON DELETE CASCADE,
+                  gps_point_id INTEGER NOT NULL REFERENCES gps_points(id) ON DELETE CASCADE,
+                  ordinal INTEGER NOT NULL,
+                  association_source TEXT NOT NULL DEFAULT 'import',
+                  PRIMARY KEY(drive_id, gps_point_id), UNIQUE(drive_id, ordinal)
                 );
                 CREATE TABLE IF NOT EXISTS trip_drives(
                   trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -158,6 +166,10 @@ class JournalStore:
             stop_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(stops)")}
             if "drive_id" not in stop_columns:
                 self.connection.execute("ALTER TABLE stops ADD COLUMN drive_id TEXT")
+            drive_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(drives)")}
+            for column in ("end_reason", "start_latitude", "start_longitude", "end_latitude", "end_longitude"):
+                if column not in drive_columns:
+                    self.connection.execute(f"ALTER TABLE drives ADD COLUMN {column} {'TEXT' if column == 'end_reason' else 'REAL'}")
 
     def _row(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
         return dict(row) if row is not None else None
@@ -271,7 +283,7 @@ class JournalStore:
         ended = started + timedelta(minutes=int(duration_minutes or 0))
         drive_id, now = _id("drive"), _now()
         with self._lock, self.connection:
-            self.connection.execute("INSERT INTO drives(id,vehicle_id,started_at,ended_at,distance_m,source,start_label,end_label,manual_distance_km,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (drive_id, vehicle_id, started.isoformat(), ended.isoformat(), float(distance_km) * 1000, "manual", start_location, end_location, float(distance_km), now))
+            self.connection.execute("INSERT INTO drives(id,vehicle_id,started_at,ended_at,distance_m,source,start_label,end_label,manual_distance_km,end_reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (drive_id, vehicle_id, started.isoformat(), ended.isoformat(), float(distance_km) * 1000, "manual", start_location, end_location, float(distance_km), "manual", now))
             if trip_id:
                 self.connection.execute("INSERT INTO trip_drives(trip_id,drive_id,linked_at) VALUES(?,?,?)", (trip_id, drive_id, now))
         return drive_id
@@ -325,7 +337,23 @@ class JournalStore:
         if drive_ids is not None:
             allowed = set(drive_ids)
             drives = [drive for drive in drives if drive["id"] in allowed]
-        return [{"drive_id": drive["id"], "started_at": drive["started_at"], "ended_at": drive["ended_at"], "source": drive["source"], "points": []} for drive in drives]
+        result = []
+        with self._lock:
+            for drive in drives:
+                rows = self.connection.execute(
+                    "SELECT p.id,p.recorded_at,p.latitude,p.longitude,p.accuracy_m,dgp.ordinal "
+                    "FROM drive_gps_points dgp JOIN gps_points p ON p.id=dgp.gps_point_id "
+                    "WHERE dgp.drive_id=? ORDER BY dgp.ordinal", (drive["id"],)
+                ).fetchall()
+                points = [dict(row) for row in rows]
+                result.append({
+                    "drive_id": drive["id"], "started_at": drive["started_at"], "ended_at": drive["ended_at"],
+                    "source": drive["source"], "end_reason": drive.get("end_reason"),
+                    "start_latitude": drive.get("start_latitude"), "start_longitude": drive.get("start_longitude"),
+                    "end_latitude": drive.get("end_latitude"), "end_longitude": drive.get("end_longitude"),
+                    "points": points,
+                })
+        return result
 
     def assign_interruption(self, trip_id: str, interruption_id: str, status: str, stop_id: str | None = None) -> None:
         if status not in {"assigned", "dismissed", "pending"}:
@@ -445,18 +473,40 @@ class JournalStore:
             points.append({"vehicle_id": vehicle_id, "recorded_at": recorded_at, "latitude": lat, "longitude": lon})
         if not points:
             raise ValueError("gpx_no_valid_points")
-        return {"file_hash": hashlib.sha256(data).hexdigest(), "vehicle_id": vehicle_id, "points": points, "point_count": len(points), "warnings": []}
+        digest = hashlib.sha256(data).hexdigest()
+        started_at, ended_at = points[0]["recorded_at"], points[-1]["recorded_at"]
+        distance_m = sum(_distance_m(left["latitude"], left["longitude"], right["latitude"], right["longitude"]) for left, right in itertools.pairwise(points))
+        return {
+            "file_hash": digest, "vehicle_id": vehicle_id, "points": points, "point_count": len(points), "warnings": [],
+            "drives": [{"key": f"{digest}:0", "started_at": started_at, "ended_at": ended_at, "distance_m": distance_m, "duration_seconds": max(0, int((datetime.fromisoformat(ended_at) - datetime.fromisoformat(started_at)).total_seconds())), "reason": "gpx_track"}],
+        }
 
-    def import_gpx(self, preview: dict[str, Any], trip_id: str | None = None) -> dict[str, Any]:
+    def import_gpx(self, preview: dict[str, Any], trip_id: str | None = None, drive_keys: list[str] | None = None) -> dict[str, Any]:
         digest = preview["file_hash"]
         with self._lock:
             if self.connection.execute("SELECT 1 FROM gpx_imports WHERE file_hash=?", (digest,)).fetchone():
                 return {"imported": False, "reason": "already_imported", "file_hash": digest}
         with self._lock, self.connection:
+            point_ids = []
             for point in preview["points"]:
                 self.connection.execute("INSERT OR IGNORE INTO gps_points(vehicle_id,recorded_at,latitude,longitude) VALUES(?,?,?,?)", (point["vehicle_id"], point["recorded_at"], point["latitude"], point["longitude"]))
+                row = self.connection.execute("SELECT id FROM gps_points WHERE vehicle_id=? AND recorded_at=? AND latitude=? AND longitude=?", (point["vehicle_id"], point["recorded_at"], point["latitude"], point["longitude"])).fetchone()
+                point_ids.append(int(row[0]))
+            selected = {item["key"] for item in preview.get("drives", [])} if drive_keys is None else set(drive_keys)
+            imported_drives = 0
+            for drive in preview.get("drives", []):
+                if drive["key"] not in selected:
+                    continue
+                drive_id = _id("drive")
+                first, last = preview["points"][0], preview["points"][-1]
+                self.connection.execute("INSERT INTO drives(id,vehicle_id,started_at,ended_at,distance_m,source,end_reason,start_latitude,start_longitude,end_latitude,end_longitude,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (drive_id, preview["vehicle_id"], drive["started_at"], drive["ended_at"], drive["distance_m"], "gpx", drive.get("reason"), first["latitude"], first["longitude"], last["latitude"], last["longitude"], _now()))
+                for ordinal, point_id in enumerate(point_ids):
+                    self.connection.execute("INSERT INTO drive_gps_points(drive_id,gps_point_id,ordinal,association_source) VALUES(?,?,?,?)", (drive_id, point_id, ordinal, "gpx"))
+                if trip_id:
+                    self.connection.execute("INSERT INTO trip_drives(trip_id,drive_id,linked_at) VALUES(?,?,?)", (trip_id, drive_id, _now()))
+                imported_drives += 1
             self.connection.execute("INSERT INTO gpx_imports(file_hash,vehicle_id,imported_at,point_count,trip_id) VALUES(?,?,?,?,?)", (digest, preview["vehicle_id"], _now(), preview["point_count"], trip_id))
-        return {"imported": True, "file_hash": digest, "point_count": preview["point_count"]}
+        return {"imported": True, "file_hash": digest, "point_count": preview["point_count"], "drives_imported": imported_drives}
 
     def render_pdf(self, vehicle_id: str, trip_id: str, language: str = "de") -> bytes:
         """Create a dependency-free, text report with the stable data sections.
@@ -566,7 +616,7 @@ class JournalStore:
         source_db = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
         try:
             tables = {row[0] for row in source_db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            mapping = {table: table for table in ("trips", "stays", "stops", "expenses", "gps_points") if table in tables}
+            mapping = {table: table for table in ("trips", "stays", "stops", "expenses", "gps_points", "drives", "drive_gps_points", "trip_drives") if table in tables}
             counts = {table: int(source_db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in mapping}
         finally:
             source_db.close()
@@ -589,10 +639,37 @@ class JournalStore:
         counts: dict[str, int] = {}
         try:
             with self._lock, self.connection:
-                for table in ("trips", "stays", "stops", "expenses", "gps_points"):
+                for table in ("trips", "stays", "stops", "expenses", "gps_points", "drives", "trip_drives", "drive_gps_points"):
                     if table not in preview["mapping"]:
                         continue
                     columns = {row[1] for row in source.execute(f"PRAGMA table_info({table})")}
+                    if table == "trip_drives":
+                        if not {"trip_id", "drive_id"} <= columns:
+                            raise ValueError(f"legacy_schema_invalid:{table}")
+                        for data_row in source.execute("SELECT * FROM trip_drives"):
+                            data = dict(zip([column[1] for column in source.execute("PRAGMA table_info(trip_drives)")], data_row))
+                            trip_id = id_map.get(f"trips:{data.get('trip_id')}")
+                            drive_id = id_map.get(f"drives:{data.get('drive_id')}")
+                            if trip_id and drive_id:
+                                self.connection.execute("INSERT OR IGNORE INTO trip_drives(trip_id,drive_id,linked_at) VALUES(?,?,?)", (trip_id, drive_id, data.get("linked_at", _now())))
+                            counts[table] = counts.get(table, 0) + 1
+                        continue
+                    if table == "drive_gps_points":
+                        if not {"drive_id", "gps_point_id"} <= columns:
+                            raise ValueError(f"legacy_schema_invalid:{table}")
+                        association_columns = [column[1] for column in source.execute("PRAGMA table_info(drive_gps_points)")]
+                        for data_row in source.execute("SELECT * FROM drive_gps_points"):
+                            data = dict(zip(association_columns, data_row))
+                            drive_id = id_map.get(f"drives:{data.get('drive_id')}")
+                            gps_row = source.execute("SELECT vehicle_id,recorded_at,latitude,longitude,accuracy_m FROM gps_points WHERE id=?", (data.get("gps_point_id"),)).fetchone()
+                            if drive_id and gps_row is not None:
+                                gps_vehicle, recorded_at, latitude, longitude, _accuracy_m = gps_row
+                                mapped_vehicle = (vehicle_map or {}).get(str(gps_vehicle), str(gps_vehicle))
+                                local = self.connection.execute("SELECT id FROM gps_points WHERE vehicle_id=? AND recorded_at=? AND latitude=? AND longitude=?", (mapped_vehicle, recorded_at, latitude, longitude)).fetchone()
+                                if local is not None:
+                                    self.connection.execute("INSERT OR IGNORE INTO drive_gps_points(drive_id,gps_point_id,ordinal,association_source) VALUES(?,?,?,?)", (drive_id, local[0], int(data.get("ordinal", 0)), "legacy"))
+                            counts[table] = counts.get(table, 0) + 1
+                        continue
                     required = {"id", "vehicle_id"}
                     if not required <= columns:
                         raise ValueError(f"legacy_schema_invalid:{table}")
@@ -616,6 +693,30 @@ class JournalStore:
                             if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
                                 raise ValueError("legacy_coordinates_invalid")
                             self.connection.execute("INSERT OR IGNORE INTO gps_points(vehicle_id,recorded_at,latitude,longitude,accuracy_m) VALUES(?,?,?,?,?)", (vehicle_id, data.get("recorded_at", _now()), latitude, longitude, data.get("accuracy_m")))
+                        elif table == "drives":
+                            started_at, ended_at = data.get("started_at"), data.get("ended_at")
+                            if not started_at or not ended_at:
+                                raise ValueError("legacy_drive_times_invalid")
+                            self.connection.execute(
+                                "INSERT OR IGNORE INTO drives(id,vehicle_id,started_at,ended_at,distance_m,source,start_label,end_label,manual_distance_km,end_reason,start_latitude,start_longitude,end_latitude,end_longitude,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                                (new_id, vehicle_id, started_at, ended_at, data.get("distance_m"), data.get("source", "legacy"), data.get("start_label"), data.get("end_label"), data.get("manual_distance_km"), data.get("end_reason"), data.get("start_latitude"), data.get("start_longitude"), data.get("end_latitude"), data.get("end_longitude"), _now()),
+                            )
+                        elif table == "trip_drives":
+                            trip_id = id_map.get(f"trips:{data.get('trip_id')}")
+                            drive_id = id_map.get(f"drives:{data.get('drive_id')}")
+                            if trip_id and drive_id:
+                                self.connection.execute("INSERT OR IGNORE INTO trip_drives(trip_id,drive_id,linked_at) VALUES(?,?,?)", (trip_id, drive_id, data.get("linked_at", _now())))
+                        elif table == "drive_gps_points":
+                            drive_id = id_map.get(f"drives:{data.get('drive_id')}")
+                            gps_id = data.get("gps_point_id")
+                            if drive_id and gps_id is not None:
+                                gps_row = source.execute("SELECT vehicle_id,recorded_at,latitude,longitude,accuracy_m FROM gps_points WHERE id=?", (gps_id,)).fetchone()
+                                if gps_row is not None:
+                                    gps_vehicle, recorded_at, latitude, longitude, _accuracy_m = gps_row
+                                    mapped_vehicle = (vehicle_map or {}).get(str(gps_vehicle), str(gps_vehicle))
+                                    local = self.connection.execute("SELECT id FROM gps_points WHERE vehicle_id=? AND recorded_at=? AND latitude=? AND longitude=?", (mapped_vehicle, recorded_at, latitude, longitude)).fetchone()
+                                    if local is not None:
+                                        self.connection.execute("INSERT OR IGNORE INTO drive_gps_points(drive_id,gps_point_id,ordinal,association_source) VALUES(?,?,?,?)", (drive_id, local[0], int(data.get("ordinal", 0)), "legacy"))
                         counts[table] = counts.get(table, 0) + 1
                 self.connection.execute("INSERT INTO import_log(source_hash,imported_at,dry_run,counts_json,id_map_json) VALUES(?,?,?,?,?)", (preview["source_hash"], _now(), 0, json.dumps(counts, sort_keys=True), json.dumps(id_map, sort_keys=True)))
         finally:

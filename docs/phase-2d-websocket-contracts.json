@@ -38,6 +38,39 @@
     "update_overnight": "upsert_overnight",
     "update_rating": "upsert_rating"
   },
+  "contract_comparison": {
+    "list_vehicles": {"stable_required": [], "suite_required": [], "response": "vehicles[]"},
+    "export_pdf": {"stable_required": ["vehicle_id", "trip_id"], "suite_required": ["vehicle_id", "trip_id"], "response": "pdf_base64,filename"},
+    "list": {"stable_required": ["vehicle_id"], "suite_required": ["vehicle_id"], "response": "trips,summary,stays,stops,expenses,drives,suggestions"},
+    "route": {"stable_required": ["vehicle_id"], "suite_required": ["vehicle_id"], "response": "segments with ordered points"},
+    "diagnostics": {"stable_required": ["vehicle_id"], "suite_required": ["vehicle_id"], "response": "database,schema_version,module_enabled,summary"},
+    "create_trip": {"stable_required": ["vehicle_id", "title"], "suite_required": ["vehicle_id", "title"], "response": "trip_id"},
+    "update_trip": {"stable_required": ["vehicle_id", "trip_id"], "suite_required": ["trip_id"], "response": "empty success"},
+    "delete_trip": {"stable_required": ["vehicle_id", "trip_id"], "suite_required": ["trip_id"], "response": "empty success"},
+    "transition_trip": {"stable_required": ["vehicle_id", "trip_id", "status"], "suite_required": ["trip_id", "status"], "response": "status"},
+    "link_drives": {"stable_required": ["vehicle_id", "trip_id", "drive_ids"], "suite_required": ["trip_id", "drive_ids"], "response": "empty success"},
+    "unlink_drive": {"stable_required": ["vehicle_id", "trip_id", "drive_id"], "suite_required": ["trip_id", "drive_id"], "response": "empty success"},
+    "create_manual_drive": {"stable_required": ["vehicle_id", "occurred_at", "start_location", "end_location", "distance_km"], "suite_required": ["vehicle_id", "occurred_at", "start_location", "end_location", "distance_km"], "response": "drive_id"},
+    "update_manual_drive": {"stable_required": ["vehicle_id", "drive_id", "occurred_at", "start_location", "end_location", "distance_km"], "suite_required": ["drive_id"], "response": "empty success"},
+    "delete_manual_drive": {"stable_required": ["vehicle_id", "drive_id"], "suite_required": ["drive_id"], "response": "empty success"},
+    "create_stop": {"stable_required": ["vehicle_id", "occurred_at"], "suite_required": ["vehicle_id"], "response": "stop_id"},
+    "update_stop": {"stable_required": ["vehicle_id", "stop_id"], "suite_required": ["stop_id"], "response": "empty success"},
+    "delete_stop": {"stable_required": ["vehicle_id", "stop_id"], "suite_required": ["stop_id"], "response": "empty success"},
+    "assign_interruption": {"stable_required": ["vehicle_id", "trip_id", "interruption_id", "status"], "suite_required": ["trip_id", "interruption_id", "status"], "response": "empty success"},
+    "create_stop_from_interruption": {"stable_required": ["vehicle_id", "trip_id", "interruption_id", "name"], "suite_required": ["vehicle_id", "trip_id", "interruption_id", "name"], "response": "stop_id"},
+    "create_expense": {"stable_required": ["vehicle_id", "trip_id", "category", "amount_minor"], "suite_required": ["vehicle_id"], "response": "expense_id"},
+    "update_expense": {"stable_required": ["vehicle_id", "expense_id"], "suite_required": ["expense_id"], "response": "empty success"},
+    "delete_expense": {"stable_required": ["vehicle_id", "expense_id"], "suite_required": ["expense_id"], "response": "empty success"},
+    "update_overnight": {"stable_required": ["vehicle_id", "place_id"], "suite_required": ["place_id"], "response": "empty success"},
+    "update_rating": {"stable_required": ["vehicle_id", "place_id", "overall"], "suite_required": ["place_id", "overall"], "response": "empty success"},
+    "delete_rating": {"stable_required": ["vehicle_id", "place_id"], "suite_required": ["place_id"], "response": "empty success"},
+    "list_stop_suggestions": {"stable_required": ["vehicle_id"], "suite_required": ["vehicle_id"], "response": "suggestions[]"},
+    "generate_stop_suggestions": {"stable_required": ["vehicle_id"], "suite_required": ["vehicle_id"], "response": "suggestions[]"},
+    "accept_stop_suggestion": {"stable_required": ["vehicle_id", "suggestion_id"], "suite_required": ["suggestion_id"], "response": "stop_id"},
+    "dismiss_stop_suggestion": {"stable_required": ["vehicle_id", "suggestion_id"], "suite_required": ["suggestion_id"], "response": "empty success"},
+    "analyze_gpx": {"stable_required": ["vehicle_id", "content_base64"], "suite_required": ["vehicle_id", "content_base64"], "response": "points[],drives[],warnings"},
+    "import_gpx": {"stable_required": ["vehicle_id", "content_base64", "file_hash"], "suite_required": ["vehicle_id", "content_base64"], "response": "point_count,drives_imported"}
+  },
   "contract_status": {
     "authentication": "HA authenticated websocket boundary",
     "validation": "voluptuous schemas on every suite command",
@@ -46,8 +79,8 @@
     "full_parity": false,
     "known_differences": [
       "Historical namespace is not duplicated; the suite namespace is used.",
-      "Some legacy optional fields (for example occurred_on/occurred_time and drive_keys) are not yet persisted.",
-      "The route response currently exposes drive segments without reconstructed GPS geometry.",
+      "Some legacy optional fields (for example occurred_on/occurred_time, odometer_km, stay_id and place_id) are not yet persisted.",
+      "The suite now persists GPX drive geometry; automatic movement-based drive segmentation remains incomplete.",
       "The suite uses upsert names for overnight and rating updates."
     ]
   }

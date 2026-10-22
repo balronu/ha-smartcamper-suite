@@ -92,6 +92,50 @@ def test_gpx_preview_import_pdf_and_suggestion_contracts(tmp_path):
     store.close()
 
 
+def test_gpx_import_persists_ordered_geometry_and_route_segments(tmp_path):
+    store = JournalStore(tmp_path / "suite.sqlite")
+    trip_id = store.create_trip("vehicle-a", "Geometriereise")
+    gpx = b'''<gpx version="1.1"><trk><trkseg><trkpt lat="50.0" lon="8.0"><time>2026-01-01T10:00:00Z</time></trkpt><trkpt lat="50.001" lon="8.002"><time>2026-01-01T10:01:00Z</time></trkpt><trkpt lat="50.003" lon="8.004"><time>2026-01-01T10:02:00Z</time></trkpt></trkseg></trk></gpx>'''
+    preview = store.analyze_gpx(gpx, "vehicle-a")
+    result = store.import_gpx(preview, trip_id)
+    assert result["drives_imported"] == 1
+    segment = store.route_segments("vehicle-a", trip_id)[0]
+    assert [point["recorded_at"] for point in segment["points"]] == [point["recorded_at"] for point in preview["points"]]
+    assert [(point["latitude"], point["longitude"]) for point in segment["points"]] == [(point["latitude"], point["longitude"]) for point in preview["points"]]
+    assert segment["source"] == "gpx"
+    store.close()
+
+
+def test_legacy_import_preserves_drive_geometry_and_associations(tmp_path):
+    source = tmp_path / "legacy.sqlite"
+    connection = sqlite3.connect(source)
+    connection.executescript("""
+        CREATE TABLE trips(id TEXT PRIMARY KEY, vehicle_id TEXT, title TEXT, started_at TEXT, status TEXT);
+        CREATE TABLE gps_points(id INTEGER PRIMARY KEY, vehicle_id TEXT, recorded_at TEXT, latitude REAL, longitude REAL, accuracy_m REAL);
+        CREATE TABLE drives(id TEXT PRIMARY KEY, vehicle_id TEXT, started_at TEXT, ended_at TEXT, distance_m REAL, source TEXT, start_latitude REAL, start_longitude REAL, end_latitude REAL, end_longitude REAL);
+        CREATE TABLE trip_drives(trip_id TEXT, drive_id TEXT, linked_at TEXT);
+        CREATE TABLE drive_gps_points(drive_id TEXT, gps_point_id INTEGER, ordinal INTEGER);
+        INSERT INTO trips VALUES('trip-old','old-vehicle','Route','2026-01-01T00:00:00+00:00','completed');
+        INSERT INTO gps_points VALUES(1,'old-vehicle','2026-01-01T10:00:00+00:00',50.0,8.0,5.0);
+        INSERT INTO gps_points VALUES(2,'old-vehicle','2026-01-01T10:01:00+00:00',50.1,8.1,5.0);
+        INSERT INTO drives VALUES('drive-old','old-vehicle','2026-01-01T10:00:00+00:00','2026-01-01T10:01:00+00:00',12000,'gpx',50.0,8.0,50.1,8.1);
+        INSERT INTO trip_drives VALUES('trip-old','drive-old','2026-01-01T00:00:00+00:00');
+        INSERT INTO drive_gps_points VALUES('drive-old',1,0);
+        INSERT INTO drive_gps_points VALUES('drive-old',2,1);
+    """)
+    connection.commit()
+    before = source.read_bytes()
+    connection.close()
+    store = JournalStore(tmp_path / "suite.sqlite")
+    result = store.import_legacy(source, opt_in=True, dry_run=False, vehicle_map={"old-vehicle": "suite-vehicle"})
+    assert result["counts"]["drives"] == 1
+    assert result["counts"]["drive_gps_points"] == 2
+    assert len(store.route_segments("suite-vehicle")) == 1
+    assert len(store.route_segments("suite-vehicle")[0]["points"]) == 2
+    assert source.read_bytes() == before
+    store.close()
+
+
 def test_drive_and_historical_update_contracts_are_transactional(tmp_path):
     store = JournalStore(tmp_path / "suite.sqlite")
     trip_id = store.create_trip("vehicle-a", "Fahrtentest")

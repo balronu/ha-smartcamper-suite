@@ -172,6 +172,12 @@ class SmartCamperCard extends HTMLElement {
       this.querySelector(".journal-diagnostics")?.addEventListener("click", () => {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/diagnostics", vehicle_id: vehicleId });
       });
+      this.querySelectorAll<HTMLButtonElement>(".journal-stop-delete").forEach((button) => button.addEventListener("click", () => {
+        if (button.dataset.stopId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_stop", stop_id: button.dataset.stopId });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-expense-delete").forEach((button) => button.addEventListener("click", () => {
+        if (button.dataset.expenseId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_expense", expense_id: button.dataset.expenseId });
+      }));
       return;
     }
     if (this.config.module === "route_planner") {
@@ -304,11 +310,8 @@ class SmartCamperCard extends HTMLElement {
     if (!vehicleId || !this._hass?.callWS || this.journalDetailsLoading || this.journalDetailsVehicle === vehicleId) return;
     this.journalDetailsLoading = true;
     try {
-      const [drives, suggestions] = await Promise.all([
-        this._hass.callWS({ type: "smartcamper_suite/journal/list_drives", vehicle_id: vehicleId }),
-        this._hass.callWS({ type: "smartcamper_suite/journal/list_suggestions", vehicle_id: vehicleId, status: "pending" }),
-      ]);
-      this.journalDetails = { vehicle_id: vehicleId, drives: drives?.drives ?? [], suggestions: suggestions?.suggestions ?? [] };
+      const details = await this._hass.callWS({ type: "smartcamper_suite/journal/list", vehicle_id: vehicleId });
+      this.journalDetails = { vehicle_id: vehicleId, drives: details?.drives ?? [], suggestions: details?.suggestions ?? [], stays: details?.stays ?? [], stops: details?.stops ?? [], expenses: details?.expenses ?? [] };
       this.journalDetailsVehicle = vehicleId;
       this.render();
     } catch {

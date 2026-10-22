@@ -106,6 +106,7 @@ try {
     const hassObject = document.querySelector("#first").hass;
     hassObject.callWS = async (message) => {
       window.journalWsCalls.push(message);
+      if (message.type.endsWith("/list")) return { drives: [{ id: "drive_1", source: "manual", started_at: "2026-01-01T10:00:00Z", ended_at: "2026-01-01T10:30:00Z" }], suggestions: [{ id: "suggestion_1", arrived_at: "2026-01-01T11:00:00Z" }], stays: [], stops: [], expenses: [] };
       if (message.type.endsWith("list_drives")) return { drives: [{ id: "drive_1", source: "manual", started_at: "2026-01-01T10:00:00Z", ended_at: "2026-01-01T10:30:00Z" }] };
       if (message.type.endsWith("list_suggestions")) return { suggestions: [{ id: "suggestion_1", arrived_at: "2026-01-01T11:00:00Z" }] };
       if (message.type.endsWith("export_pdf")) return { pdf_base64: "JVBERi0xLjQKJSVFT0YK", filename: "journal.pdf" };

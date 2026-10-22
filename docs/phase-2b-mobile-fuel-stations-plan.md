@@ -1,6 +1,6 @@
 # Phase 2B – Mobile Fuel Stations: technischer Umsetzungsplan
 
-**Status:** Planung, keine Phase-2B-Implementierung begonnen  
+**Status:** Implementierung auf dem Entwicklungsbranch, Review ausstehend
 **Stand:** 22.10.2026  
 **Suite-Basis:** \`main\` bei \`652613565e5088dd62bf39ab80be94e5ba1880e5\`  
 **Referenz:** Mobile Fuel Stations \`v0.8.4\`, Commit \`13da23a87d10af753d68af51bfee9694446c1036\`
@@ -197,5 +197,29 @@ Diff-Prüfungen. Release, HACS und produktive Installation bleiben außerhalb.
 - Welche Defaults gelten für neue Fahrzeuge bei globalen Legacy-Optionen?
 - Sollen alte Sensor-/Service-Entity-IDs zeitweise gespiegelt werden?
 
-**Freigabestatus:** Dieser Plan ist zur Prüfung vorgelegt. Phase 2B beginnt erst
-nach ausdrücklicher Freigabe.
+**Freigabestatus:** Die Implementierung ist nach ausdrücklicher Freigabe des
+Auftraggebers gestartet; Review und Merge stehen noch aus.
+
+## 9. Umsetzungsabweichungen und aktueller Status
+
+Die Implementierung wurde nach der ausdrücklichen Phase-2B-Freigabe begonnen.
+Die drei Provider-Adapter, fahrzeugbezogene Fuel-Einstellungen, Runtime,
+Sensoren, Credential-Services, OAuth-Single-Flight-Basis, Legacy-Dry-Run und
+die Kartenansicht sind nun als Kandidat implementiert. Die anderen Module
+bleiben Platzhalter.
+
+Bewusste Abweichungen vom Plan:
+
+- Die Provider-Transportgrenze ist ein synthetischer, injizierbarer Contract;
+  die HA-Runtime bindet ihn an die gemeinsame HA-aiohttp-Session. Es gibt
+  keinen separaten Client pro Fahrzeug.
+- OAuth wird zunächst über den zentralen CredentialStore und einen geprüften
+  Single-Flight-Refresh-Callback abstrahiert. Provider-spezifische OAuth-
+  Scopes, Autorisierungsdialog und Token-Endpoint-Integration müssen vor einer
+  produktiven Nakordoni-Nutzung noch separat gegen die aktuelle HA-OAuth-API
+  geprüft werden.
+- Die Legacy-Migration bleibt absichtlich Preview-only; sie schreibt weder
+  Config Entries noch Dashboards und löscht kein altes Entry.
+- Die v0.8.4-Kartenmodi sind in der Suite-Karte als Fuel-Ansicht zusammengeführt;
+  die vollständige historische Navigation und alle dekorativen Optionen sind
+  weiterhin ein Review-/Browser-Abnahmepunkt.

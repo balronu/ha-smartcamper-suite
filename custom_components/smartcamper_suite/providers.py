@@ -14,6 +14,7 @@ class ProviderDefinition:
 
 _DEFINITIONS = (
     ProviderDefinition("nakordoni", "Nakordoni", (
+        ProviderService("nakordoni", "fuel_prices", frozenset({"fuel_prices"}), True, "nakordoni_fuel"),
         ProviderService("nakordoni", "routing", frozenset({"motorhome_routing"}), True, "nakordoni_routing"),
         ProviderService("nakordoni", "border_forecast", frozenset({"forecast"}), True, "nakordoni_forecast"),
     )),

@@ -1,6 +1,6 @@
 # SmartCamper Suite
 
-**Phase 2A foundation — not a complete camper solution.**
+**Phase 2B development — not a production release.**
 
 SmartCamper Suite is a single modular Home Assistant custom integration under
 the domain `smartcamper_suite`. It provides one shared vehicle registry,
@@ -10,14 +10,20 @@ versioned suite storage, four isolated module runtimes, and the foundation for
 
 ## Current scope
 
-This branch implements architecture and testable foundations only. It does not
-read or migrate any legacy Travel Journal database, perform live API calls,
-run OAuth flows, create productive vehicle profiles, or install anything in
-Home Assistant VM 104.
+The `fuel_stations` module now provides offline-testable Tankerkönig, Petromap
+and Nakordoni adapters, vehicle-scoped search settings, shared provider
+credentials, provider fallback, per-vehicle sensors and the fuel-stations view
+in `custom:smartcamper-card`. OAuth refresh and legacy migration are tested as
+isolated candidate paths; no legacy entry is changed automatically.
+
+This is still development code. It does not open or migrate a productive
+database, use real credentials, perform live API calls in tests, or install
+anything in Home Assistant VM 104.
 
 Modules: `travel_journal`, `fuel_stations`, `route_planner`, and
-`border_forecast`. They are disabled by default and contain no live feature
-implementation in Phase 2A.
+`border_forecast`. Only `fuel_stations` has Phase-2B candidate functionality;
+the other three remain isolated placeholders and all modules stay disabled by
+default.
 
 ## Development
 
@@ -30,5 +36,7 @@ cd frontend && npm ci && npm test && npm run build
 
 See [README.en.md](README.en.md), [docs/architecture.md](docs/architecture.md)
 and [docs/development.md](docs/development.md).
+The implementation plan and deviations are in
+[docs/phase-2b-mobile-fuel-stations-plan.md](docs/phase-2b-mobile-fuel-stations-plan.md).
 The QA status and remaining merge gates are in
 [docs/phase-2a-qa.md](docs/phase-2a-qa.md).

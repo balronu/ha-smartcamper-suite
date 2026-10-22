@@ -21,12 +21,14 @@ from .models import Vehicle
 from .modules import ModuleManager
 from .oauth2 import async_register as async_register_oauth
 from .providers import ProviderRegistry
+from .route_planner import RoutePlannerRuntime
 from .storage import SuiteStore
 
 PLATFORMS: list[str] = ["sensor"]
 SERVICE_SET_CREDENTIAL = "set_credential"
 SERVICE_REMOVE_CREDENTIAL = "remove_credential"
 SERVICE_REFRESH_FUEL = "refresh_fuel_stations"
+SERVICE_CALCULATE_ROUTE = "calculate_route"
 _CREDENTIAL_SCHEMA = vol.Schema({
     vol.Required("entry_id"): str,
     vol.Required("credential_id"): str,
@@ -38,6 +40,14 @@ _REMOVE_CREDENTIAL_SCHEMA = vol.Schema({
     vol.Required("credential_id"): str,
 })
 _REFRESH_FUEL_SCHEMA = vol.Schema({vol.Required("vehicle_id"): str})
+_ROUTE_SCHEMA = vol.Schema({
+    vol.Required("vehicle_id"): str,
+    vol.Required("origin"): dict,
+    vol.Required("destination"): dict,
+    vol.Optional("via", default=[]): [dict],
+    vol.Optional("alternatives", default=0): vol.All(int, vol.Range(min=0, max=2)),
+    vol.Optional("traffic", default="off"): vol.In(("off", "forecast", "live")),
+})
 
 
 @dataclass(slots=True)
@@ -48,6 +58,7 @@ class SuiteRuntime:
     modules: ModuleManager
     store: SuiteStore
     fuel: FuelStationsRuntime
+    route: RoutePlannerRuntime
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -114,14 +125,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         FuelProviderRegistry(providers, transport),
         credentials.get_secret,
     )
+    nakordoni_credential = None
+    account = provider_accounts.get("nakordoni")
+    if isinstance(account, dict):
+        credential_id = account.get("credential_id")
+        if isinstance(credential_id, str):
+            nakordoni_credential = credentials.get_secret(credential_id)
+    route = RoutePlannerRuntime(vehicles, nakordoni_credential)
     runtime = SuiteRuntime(
-        providers, credentials, ApiClient(), ModuleManager(entry.options.get("modules")), store, fuel
+        providers, credentials, ApiClient(), ModuleManager(entry.options.get("modules")), store, fuel, route
     )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
     if hasattr(hass, "services") and not hass.services.has_service(DOMAIN, SERVICE_SET_CREDENTIAL):
         hass.services.async_register(DOMAIN, SERVICE_SET_CREDENTIAL, _async_set_credential, _CREDENTIAL_SCHEMA)
         hass.services.async_register(DOMAIN, SERVICE_REMOVE_CREDENTIAL, _async_remove_credential, _REMOVE_CREDENTIAL_SCHEMA)
         hass.services.async_register(DOMAIN, SERVICE_REFRESH_FUEL, _async_refresh_fuel, _REFRESH_FUEL_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_CALCULATE_ROUTE, _async_calculate_route, _ROUTE_SCHEMA)
     await runtime.modules.async_setup(runtime)
     await runtime.fuel.async_start_background(
         hass,
@@ -136,6 +155,8 @@ async def _async_set_credential(call: Any) -> None:
         call.data["credential_id"], call.data["provider"], call.data["api_key"]
     )
     runtime.fuel.accounts.setdefault(call.data["provider"], {})["credential_id"] = call.data["credential_id"]
+    if call.data["provider"] == "nakordoni":
+        runtime.route.coordinator.provider.credential = runtime.credentials.get_secret(call.data["credential_id"])
     entry = call.hass.config_entries.async_get_entry(call.data["entry_id"])
     if entry is not None:
         call.hass.config_entries.async_update_entry(
@@ -146,6 +167,8 @@ async def _async_set_credential(call: Any) -> None:
 async def _async_remove_credential(call: Any) -> None:
     runtime: SuiteRuntime = call.hass.data[DOMAIN][call.data["entry_id"]]
     runtime.credentials.remove(call.data["credential_id"])
+    if runtime.route.coordinator.provider.credential and call.data["credential_id"] == runtime.fuel.accounts.get("nakordoni", {}).get("credential_id"):
+        runtime.route.coordinator.provider.credential = None
     entry = call.hass.config_entries.async_get_entry(call.data["entry_id"])
     if entry is not None:
         call.hass.config_entries.async_update_entry(
@@ -173,6 +196,15 @@ async def _async_refresh_fuel(call: Any) -> None:
     except (KeyError, TypeError, ValueError):
         return
     await runtime.fuel.async_search(vehicle.vehicle_id, latitude, longitude)
+
+
+async def _async_calculate_route(call: Any) -> None:
+    runtime: SuiteRuntime = next(
+        (value for key, value in call.hass.data[DOMAIN].items() if key != "_frontend" and isinstance(value, SuiteRuntime)),
+        None,
+    )
+    if runtime is not None:
+        await runtime.route.async_calculate(dict(call.data))
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

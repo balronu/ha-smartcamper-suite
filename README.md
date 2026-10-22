@@ -1,6 +1,6 @@
 # SmartCamper Suite
 
-**Phase 2B development — not a production release.**
+**Phase 2C development — not a production release.**
 
 <p align="center"><img src="docs/assets/smartcamper-suite-logo-set.png" alt="SmartCamper Suite Logo-Set" width="720"></p>
 
@@ -27,10 +27,13 @@ This is still development code. It does not open or migrate a productive
 database, use real credentials, perform live API calls in tests, or install
 anything in Home Assistant VM 104.
 
-Modules: `travel_journal`, `fuel_stations`, `route_planner`, and
-`border_forecast`. Only `fuel_stations` has Phase-2B candidate functionality;
-the other three remain isolated placeholders and all modules stay disabled by
-default.
+Das `route_planner`-Modul verwendet die zentralen Fahrzeugprofile und bietet
+explizite, offline testbare Routenberechnung, sichtbare Beta-/Restriktions- und
+Mautwarnungen sowie GPX Route/Track/Combined. Nakordoni-Motorhome-Routing wird
+nicht als rechtlich validierte Navigation dargestellt; automatische
+Hintergrundberechnung ist absichtlich deaktiviert. Details und die vollständige
+Stable-v0.1.0-Matrix stehen in
+[docs/phase-2c-route-planner-plan.md](docs/phase-2c-route-planner-plan.md).
 
 ## Module
 
@@ -38,7 +41,7 @@ default.
 |---|---|---|
 | Camper Travel Journal | [Reisetagebuch](docs/assets/module-travel-journal.svg) | Platzhalter, Phase 2B nicht implementiert |
 | Mobile Fuel Stations | [Tankstellen](docs/assets/module-fuel-stations.svg) | Phase-2B-Kandidat, offline getestet |
-| Camper Route Planner | [Routenplanung](docs/assets/module-route-planner.svg) | Platzhalter, Phase 2B nicht implementiert |
+| Camper Route Planner | [Routenplanung](docs/assets/module-route-planner.svg) | Phase-2C-Kandidat, offline getestet |
 | Wartezeiten Forecast | [Grenzwartezeiten](docs/assets/module-border-forecast.svg) | Platzhalter, Phase 2B nicht implementiert |
 
 Die Branding-Pfade und die Herkunft der freigegebenen Logo-Datei sind in

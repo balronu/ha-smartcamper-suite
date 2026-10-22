@@ -52,3 +52,23 @@ refresh_fuel_stations:
       required: true
       selector:
         text:
+
+calculate_route:
+  name: Calculate route
+  description: Calculate a route explicitly for one configured vehicle.
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      required: true
+      selector:
+        text:
+    origin:
+      name: Origin
+      required: true
+      selector:
+        object: {}
+    destination:
+      name: Destination
+      required: true
+      selector:
+        object: {}

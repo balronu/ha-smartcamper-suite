@@ -67,6 +67,15 @@ function renderFuelStateHtml(status, stations, config) {
   if (status === "error") return '<p class="fuel-error" role="alert">Tankstellen konnten nicht geladen werden.</p>';
   return renderFuelStationsHtml(stations, config);
 }
+function renderRouteHtml(route, config) {
+  if (!route || route.state !== "ready") return `<p class="route-empty" role="status">Keine berechnete Route vorhanden.</p>`;
+  const distance = route.distance_m == null ? "\u2013" : `${(route.distance_m / 1e3).toFixed(1)} km`;
+  const duration = route.duration_s == null ? "\u2013" : `${Math.round(route.duration_s / 60)} min`;
+  const warnings = config.show_warnings === false ? "" : (route.warnings ?? []).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
+  const points = route.geometry ?? [];
+  const map = points.length > 1 ? `<svg class="route-map" viewBox="0 0 320 120" role="img" aria-label="Routenverlauf"><polyline points="${points.map((point, index) => `${index / (points.length - 1) * 300 + 10},${110 - index % 2 * 45}`).join(" ")}" fill="none" stroke="var(--primary-color,#03a9f4)" stroke-width="5" stroke-linecap="round" /></svg>` : "";
+  return `${map}<p class="route-summary"><strong>${distance}</strong> \xB7 ${duration} \xB7 ${escapeHtml(route.provider ?? "unbekannt")}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
+}
 var MODULES = /* @__PURE__ */ new Set(["travel_journal", "fuel_stations", "route_planner", "border_forecast"]);
 function validateConfig(config) {
   if (!MODULES.has(config.module)) throw new Error("Unknown SmartCamper module");
@@ -104,6 +113,8 @@ var SmartCamperCard = class extends HTMLElement {
       <label>Anzahl <input data-field="visible_station_count" type="number" min="0" /></label>
       <label>Navigation <select data-field="navigation_provider"><option value="auto">Automatisch</option><option value="apple">Apple</option><option value="google">Google</option><option value="waze">Waze</option></select></label>
       <label>Abrufmodus <select data-field="fetch_mode"><option value="automatic">Automatisch</option><option value="manual">Manuell</option></select></label>
+      <label>Route Start (JSON) <input data-field="origin" placeholder='{"latitude":50,"longitude":8}' /></label>
+      <label>Route Ziel (JSON) <input data-field="destination" placeholder='{"latitude":51,"longitude":9}' /></label>
       <label><input data-field="show_prices" type="checkbox" checked /> Preise</label>
       <label><input data-field="show_name" type="checkbox" checked /> Tankstellenname</label>
       <label><input data-field="show_distance" type="checkbox" checked /> Entfernung</label>
@@ -121,11 +132,19 @@ var SmartCamperCard = class extends HTMLElement {
       const navigation_provider = editor.querySelector("[data-field=navigation_provider]").value;
       const fetch_mode = editor.querySelector("[data-field=fetch_mode]").value;
       const visible_station_count = Number(editor.querySelector("[data-field=visible_station_count]").value) || 0;
+      const parsePoint = (field) => {
+        try {
+          const value = JSON.parse(editor.querySelector(`[data-field=${field}]`).value);
+          return value.latitude != null && value.longitude != null ? value : void 0;
+        } catch {
+          return void 0;
+        }
+      };
       const bool = (field) => editor.querySelector(`[data-field=${field}]`).checked;
       editor.dispatchEvent(new CustomEvent("config-changed", {
         bubbles: true,
         composed: true,
-        detail: { config: { ...this.config, module, vehicle_id, display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } }
+        detail: { config: { ...this.config, module, vehicle_id, origin: parsePoint("origin"), destination: parsePoint("destination"), display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } }
       }));
     };
     editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", emit));
@@ -139,6 +158,18 @@ var SmartCamperCard = class extends HTMLElement {
   }
   render() {
     if (!this.isConnected && typeof document === "undefined") return;
+    if (this.config.module === "route_planner") {
+      const states2 = this._hass?.states ?? {};
+      const vehicleId2 = selectVehicle(this.config, states2);
+      const sensor2 = Object.values(states2).find((state) => state.attributes?.vehicle_id === vehicleId2 && state.attributes?.beta !== void 0);
+      const route = sensor2?.attributes;
+      const calculate = this.config.origin && this.config.destination && vehicleId2 ? `<button class="route-calculate" type="button">Route berechnen</button>` : "";
+      this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-calculate{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId2 ?? "Kein Fahrzeug ausgew\xE4hlt"}</small></header>${renderRouteHtml(route, this.config)}${calculate}</article>`;
+      this.querySelector(".route-calculate")?.addEventListener("click", () => {
+        if (vehicleId2 && this.config.origin && this.config.destination && this._hass?.callService) void this._hass.callService("smartcamper_suite", "calculate_route", { vehicle_id: vehicleId2, origin: this.config.origin, destination: this.config.destination, via: this.config.via ?? [] });
+      });
+      return;
+    }
     if (this.config.module !== "fuel_stations") {
       this.innerHTML = `<article><strong>SmartCamper Suite</strong><p>${this.config.module}</p><small>Modul ist vorbereitet.</small></article>`;
       return;

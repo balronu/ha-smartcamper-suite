@@ -31,6 +31,21 @@ export type CardConfig = {
   show_provider_row?: boolean;
   show_dividers?: boolean;
   density?: "normal" | "compact";
+  origin?: { latitude: number; longitude: number; label?: string };
+  destination?: { latitude: number; longitude: number; label?: string };
+  via?: Array<{ latitude: number; longitude: number; label?: string }>;
+  show_warnings?: boolean;
+};
+
+export type RouteView = {
+  vehicle_id: string;
+  state?: string;
+  provider?: string;
+  distance_m?: number;
+  duration_s?: number;
+  geometry?: Array<{ latitude: number; longitude: number }>;
+  warnings?: string[];
+  beta?: boolean;
 };
 
 export type FuelStationView = {
@@ -124,6 +139,18 @@ export function renderFuelStateHtml(status: string | undefined, stations: FuelSt
   if (status === "loading") return "<p class=\"fuel-loading\" role=\"status\">Lade Tankstellen …</p>";
   if (status === "error") return "<p class=\"fuel-error\" role=\"alert\">Tankstellen konnten nicht geladen werden.</p>";
   return renderFuelStationsHtml(stations, config);
+}
+
+export function renderRouteHtml(route: RouteView | undefined, config: CardConfig): string {
+  if (!route || route.state !== "ready") return `<p class="route-empty" role="status">Keine berechnete Route vorhanden.</p>`;
+  const distance = route.distance_m == null ? "–" : `${(route.distance_m / 1000).toFixed(1)} km`;
+  const duration = route.duration_s == null ? "–" : `${Math.round(route.duration_s / 60)} min`;
+  const warnings = config.show_warnings === false ? "" : (route.warnings ?? []).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
+  const points = route.geometry ?? [];
+  const map = points.length > 1
+    ? `<svg class="route-map" viewBox="0 0 320 120" role="img" aria-label="Routenverlauf"><polyline points="${points.map((point, index) => `${(index / (points.length - 1)) * 300 + 10},${110 - (index % 2) * 45}`).join(" ")}" fill="none" stroke="var(--primary-color,#03a9f4)" stroke-width="5" stroke-linecap="round" /></svg>`
+    : "";
+  return `${map}<p class="route-summary"><strong>${distance}</strong> · ${duration} · ${escapeHtml(route.provider ?? "unbekannt")}</p>${warnings ? `<ul class="route-warnings">${warnings}</ul>` : ""}`;
 }
 
 const MODULES = new Set(["travel_journal", "fuel_stations", "route_planner", "border_forecast"]);

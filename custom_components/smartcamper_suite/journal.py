@@ -42,6 +42,48 @@ def _distance_m(latitude_a: float, longitude_a: float, latitude_b: float, longit
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1 - value)))
 
 
+def _simplify_track(points: list[dict[str, Any]], tolerance_m: float, max_points: int) -> tuple[list[dict[str, Any]], bool]:
+    """Simplify output geometry while leaving persisted source points intact."""
+    if max_points < 2 or tolerance_m < 0:
+        raise ValueError("route_parameters_invalid")
+    if len(points) <= 2:
+        return points, False
+
+    def perpendicular(point: dict[str, Any], start: dict[str, Any], end: dict[str, Any]) -> float:
+        scale = 111_320.0
+        longitude_scale = math.cos(math.radians(float(start["latitude"]))) * scale
+        px, py = float(point["longitude"]) * longitude_scale, float(point["latitude"]) * scale
+        sx, sy = float(start["longitude"]) * longitude_scale, float(start["latitude"]) * scale
+        ex, ey = float(end["longitude"]) * longitude_scale, float(end["latitude"]) * scale
+        dx, dy = ex - sx, ey - sy
+        if dx == 0 and dy == 0:
+            return math.hypot(px - sx, py - sy)
+        ratio = max(0.0, min(1.0, ((px - sx) * dx + (py - sy) * dy) / (dx * dx + dy * dy)) )
+        return math.hypot(px - sx - ratio * dx, py - sy - ratio * dy)
+
+    keep = {0, len(points) - 1}
+
+    def recurse(start: int, end: int) -> None:
+        if end - start <= 1:
+            return
+        index = max(range(start + 1, end), key=lambda item: perpendicular(points[item], points[start], points[end]))
+        if perpendicular(points[index], points[start], points[end]) > tolerance_m:
+            keep.add(index)
+            recurse(start, index)
+            recurse(index, end)
+
+    if tolerance_m == 0:
+        keep.update(range(len(points)))
+    else:
+        recurse(0, len(points) - 1)
+    selected = [points[index] for index in sorted(keep)]
+    truncated = len(selected) > max_points
+    if truncated:
+        indexes = [round(index * (len(selected) - 1) / (max_points - 1)) for index in range(max_points)]
+        selected = [selected[index] for index in indexes]
+    return selected, truncated
+
+
 @dataclass(slots=True)
 class JournalVehicle:
     vehicle_id: str
@@ -229,6 +271,22 @@ class JournalStore:
             self.connection.execute("INSERT INTO stays(id,vehicle_id,trip_id,name,started_at,ended_at,latitude,longitude,address,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (stay_id, vehicle_id, fields.get("trip_id"), name, fields.get("started_at", now), fields.get("ended_at"), fields.get("latitude"), fields.get("longitude"), fields.get("address", ""), now, now))
         return stay_id
 
+    def update_stay(self, stay_id: str, **fields: Any) -> None:
+        allowed = {"trip_id", "name", "started_at", "ended_at", "latitude", "longitude", "address"}
+        values = {key: value for key, value in fields.items() if key in allowed}
+        if not values:
+            return
+        with self._lock, self.connection:
+            cursor = self.connection.execute(f"UPDATE stays SET {','.join(f'{key}=?' for key in values)},updated_at=? WHERE id=?", (*values.values(), _now(), stay_id))
+            if cursor.rowcount != 1:
+                raise ValueError("stay_not_found")
+
+    def delete_stay(self, stay_id: str) -> None:
+        with self._lock, self.connection:
+            cursor = self.connection.execute("DELETE FROM stays WHERE id=?", (stay_id,))
+            if cursor.rowcount != 1:
+                raise ValueError("stay_not_found")
+
     def create_stop(self, vehicle_id: str, **fields: Any) -> str:
         stop_id, now = _id("stop"), _now()
         with self._lock, self.connection:
@@ -325,6 +383,25 @@ class JournalStore:
         with self._lock:
             return [dict(row) for row in self.connection.execute(query + " ORDER BY d.started_at DESC", args).fetchall()]
 
+    def assert_vehicle_scope(self, vehicle_id: str, **identifiers: str | None) -> None:
+        """Reject mutations that address an object owned by another vehicle."""
+        tables = {"trip_id": "trips", "drive_id": "drives", "stop_id": "stops", "stay_id": "stays", "expense_id": "expenses", "suggestion_id": "stop_suggestions"}
+        with self._lock:
+            for identifier, table in tables.items():
+                value = identifiers.get(identifier)
+                if value is None:
+                    continue
+                row = self.connection.execute(f"SELECT vehicle_id FROM {table} WHERE id=?", (value,)).fetchone()
+                if row is None:
+                    raise ValueError(f"{identifier}_not_found")
+                if row[0] != vehicle_id:
+                    raise ValueError("vehicle_scope_mismatch")
+            place_id = identifiers.get("place_id")
+            if place_id is not None:
+                row = self.connection.execute("SELECT vehicle_id FROM stops WHERE id=? UNION ALL SELECT vehicle_id FROM stays WHERE id=?", (place_id, place_id)).fetchone()
+                if row is not None and row[0] != vehicle_id:
+                    raise ValueError("vehicle_scope_mismatch")
+
     def link_drives(self, trip_id: str, drive_ids: list[str]) -> None:
         with self._lock, self.connection:
             if self.connection.execute("SELECT 1 FROM trips WHERE id=?", (trip_id,)).fetchone() is None:
@@ -341,7 +418,9 @@ class JournalStore:
         with self._lock, self.connection:
             self.connection.execute("DELETE FROM trip_drives WHERE trip_id=? AND drive_id=?", (trip_id, drive_id))
 
-    def route_segments(self, vehicle_id: str, trip_id: str | None = None, drive_ids: list[str] | None = None) -> list[dict[str, Any]]:
+    def route_segments(self, vehicle_id: str, trip_id: str | None = None, drive_ids: list[str] | None = None, *, max_points: int = 5000, simplify_tolerance_m: float = 0.0) -> list[dict[str, Any]]:
+        if max_points < 2 or simplify_tolerance_m < 0:
+            raise ValueError("route_parameters_invalid")
         drives = self.list_drives(vehicle_id, trip_id)
         if drive_ids is not None:
             allowed = set(drive_ids)
@@ -354,13 +433,14 @@ class JournalStore:
                     "FROM drive_gps_points dgp JOIN gps_points p ON p.id=dgp.gps_point_id "
                     "WHERE dgp.drive_id=? ORDER BY dgp.ordinal", (drive["id"],)
                 ).fetchall()
-                points = [dict(row) for row in rows]
+                original_points = [dict(row) for row in rows]
+                points, truncated = _simplify_track(original_points, simplify_tolerance_m, max_points)
                 result.append({
                     "drive_id": drive["id"], "started_at": drive["started_at"], "ended_at": drive["ended_at"],
                     "source": drive["source"], "end_reason": drive.get("end_reason"),
                     "start_latitude": drive.get("start_latitude"), "start_longitude": drive.get("start_longitude"),
                     "end_latitude": drive.get("end_latitude"), "end_longitude": drive.get("end_longitude"),
-                    "points": points,
+                    "points": points, "original_point_count": len(original_points), "truncated": truncated,
                 })
         return result
 
@@ -377,6 +457,9 @@ class JournalStore:
             result = {}
             for table, order in (("stays", "started_at"), ("stops", "occurred_at"), ("expenses", "occurred_at")):
                 result[table] = [dict(row) for row in self.connection.execute(f"SELECT * FROM {table} WHERE {where} ORDER BY {order}", args).fetchall()]
+            result["ratings"] = [dict(row) for row in self.connection.execute("SELECT r.* FROM place_ratings r JOIN stops s ON s.id=r.place_id WHERE s.vehicle_id=?", (vehicle_id,)).fetchall()]
+            result["overnights"] = [dict(row) for row in self.connection.execute("SELECT o.* FROM overnight_details o JOIN stops s ON s.id=o.place_id WHERE s.vehicle_id=?", (vehicle_id,)).fetchall()]
+            result["interruptions"] = [dict(row) for row in self.connection.execute("SELECT i.* FROM interruption_links i JOIN trips t ON t.id=i.trip_id WHERE t.vehicle_id=?", (vehicle_id,)).fetchall()]
         return result
 
     def summary(self, vehicle_id: str) -> dict[str, Any]:
@@ -562,8 +645,10 @@ class JournalStore:
             "drives": [{"key": f"{digest}:0", "started_at": started_at, "ended_at": ended_at, "distance_m": distance_m, "duration_seconds": max(0, int((datetime.fromisoformat(ended_at) - datetime.fromisoformat(started_at)).total_seconds())), "reason": "gpx_track"}],
         }
 
-    def import_gpx(self, preview: dict[str, Any], trip_id: str | None = None, drive_keys: list[str] | None = None) -> dict[str, Any]:
+    def import_gpx(self, preview: dict[str, Any], trip_id: str | None = None, drive_keys: list[str] | None = None, expected_file_hash: str | None = None) -> dict[str, Any]:
         digest = preview["file_hash"]
+        if expected_file_hash is not None and expected_file_hash != digest:
+            raise ValueError("gpx_file_hash_mismatch")
         with self._lock:
             if self.connection.execute("SELECT 1 FROM gpx_imports WHERE file_hash=?", (digest,)).fetchone():
                 return {"imported": False, "reason": "already_imported", "file_hash": digest}

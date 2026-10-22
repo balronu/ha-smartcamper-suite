@@ -106,7 +106,7 @@ try {
     const hassObject = document.querySelector("#first").hass;
     hassObject.callWS = async (message) => {
       window.journalWsCalls.push(message);
-      if (message.type.endsWith("/list")) return { drives: [{ id: "drive_1", source: "manual", started_at: "2026-01-01T10:00:00Z", ended_at: "2026-01-01T10:30:00Z" }], suggestions: [{ id: "suggestion_1", arrived_at: "2026-01-01T11:00:00Z" }], stays: [], stops: [], expenses: [] };
+      if (message.type.endsWith("/list")) return { drives: [{ id: "drive_1", source: "manual", started_at: "2026-01-01T10:00:00Z", ended_at: "2026-01-01T10:30:00Z" }], suggestions: [{ id: "suggestion_1", arrived_at: "2026-01-01T11:00:00Z" }], stays: [{ id: "stay_1", name: "Camping" }], stops: [{ id: "stop_1", name: "Pass" }], expenses: [{ id: "expense_1", category: "fuel", amount_minor: 1200, currency: "EUR" }], ratings: [{ place_id: "stop_1", overall: 4 }], overnights: [{ place_id: "stop_1", place_kind: "campsite" }], interruptions: [{ trip_id: "trip_1", interruption_id: "interrupt_1", status: "pending" }] };
       if (message.type.endsWith("list_drives")) return { drives: [{ id: "drive_1", source: "manual", started_at: "2026-01-01T10:00:00Z", ended_at: "2026-01-01T10:30:00Z" }] };
       if (message.type.endsWith("list_suggestions")) return { suggestions: [{ id: "suggestion_1", arrived_at: "2026-01-01T11:00:00Z" }] };
       if (message.type.endsWith("export_pdf")) return { pdf_base64: "JVBERi0xLjQKJSVFT0YK", filename: "journal.pdf" };
@@ -124,6 +124,18 @@ try {
   await page.locator("#first input[name=occurred_at]").fill("2026-01-01T10:00");
   await page.locator("#first .journal-drive-form button").click();
   assert.equal((await page.evaluate(() => window.journalWsCalls.filter((message) => message.type.endsWith("create_manual_drive")).length)), 1);
+  await page.locator("#first .journal-stay-create").click();
+  await page.locator("#first .journal-stay-edit").click();
+  await page.locator("#first .journal-stay-delete").click();
+  await page.locator("#first .journal-expense-edit").click();
+  await page.locator("#first .journal-expense-delete").click();
+  await page.locator("#first .journal-rating-edit").click();
+  await page.locator("#first .journal-overnight-edit").click();
+  await page.locator("#first .journal-interruption-assign").click();
+  const journalActions = await page.evaluate(() => window.journalWsCalls.map((message) => message.type));
+  for (const action of ["create_stay", "update_stay", "delete_stay", "update_expense", "delete_expense", "upsert_rating", "upsert_overnight", "assign_interruption"]) {
+    assert.ok(journalActions.some((type) => type.endsWith(action)), `missing ${action}`);
+  }
   await page.locator("#first .journal-create").click();
   assert.deepEqual(calls.at(-1), ["smartcamper_suite", "journal_create_trip", { entry_id: "default", vehicle_id: "womo", title: "Neue Reise" }]);
   const journalPdf = await Promise.all([

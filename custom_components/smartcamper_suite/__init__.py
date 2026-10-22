@@ -63,7 +63,7 @@ _JOURNAL_TRIP_SCHEMA = vol.Schema({
     vol.Optional("destination", default=""): str,
     vol.Optional("status", default="planned"): vol.In(("planned", "active", "completed", "cancelled")),
 })
-_JOURNAL_ID_SCHEMA = vol.Schema({vol.Optional("entry_id"): str, vol.Required("trip_id"): str})
+_JOURNAL_ID_SCHEMA = vol.Schema({vol.Optional("entry_id"): str, vol.Required("vehicle_id"): str, vol.Required("trip_id"): str})
 _JOURNAL_ITEM_SCHEMA = vol.Schema({
     vol.Optional("entry_id"): str,
     vol.Required("vehicle_id"): str,
@@ -288,12 +288,14 @@ async def _async_journal_create_trip(call: Any) -> None:
 
 async def _async_journal_update_trip(call: Any) -> None:
     runtime = _journal_runtime(call)
+    runtime.journal.store.assert_vehicle_scope(call.data["vehicle_id"], trip_id=call.data["trip_id"])
     fields = {key: call.data[key] for key in ("title", "description", "destination", "status") if key in call.data}
     await call.hass.async_add_executor_job(runtime.journal.store.update_trip, call.data["trip_id"], **fields)
 
 
 async def _async_journal_delete_trip(call: Any) -> None:
     runtime = _journal_runtime(call)
+    runtime.journal.store.assert_vehicle_scope(call.data["vehicle_id"], trip_id=call.data["trip_id"])
     await call.hass.async_add_executor_job(runtime.journal.store.delete_trip, call.data["trip_id"])
 
 

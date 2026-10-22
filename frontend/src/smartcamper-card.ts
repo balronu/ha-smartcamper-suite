@@ -110,13 +110,13 @@ class SmartCamperCard extends HTMLElement {
       });
       const tripId = journal?.active_trip?.id;
       this.querySelector(".journal-edit")?.addEventListener("click", () => {
-        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", trip_id: tripId, destination: "Bearbeitet" });
+        if (tripId && vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", vehicle_id: vehicleId, trip_id: tripId, destination: "Bearbeitet" });
       });
       this.querySelector(".journal-complete")?.addEventListener("click", () => {
-        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", trip_id: tripId, status: "completed" });
+        if (tripId && vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_update_trip", { entry_id: "default", vehicle_id: vehicleId, trip_id: tripId, status: "completed" });
       });
       this.querySelector(".journal-delete")?.addEventListener("click", () => {
-        if (tripId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_delete_trip", { entry_id: "default", trip_id: tripId });
+        if (tripId && vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "journal_delete_trip", { entry_id: "default", vehicle_id: vehicleId, trip_id: tripId });
       });
       this.querySelector(".journal-pdf")?.addEventListener("click", async () => {
         if (!tripId || !vehicleId || !this._hass?.callWS) return;
@@ -129,8 +129,11 @@ class SmartCamperCard extends HTMLElement {
       this.querySelector<HTMLInputElement>(".journal-gpx")?.addEventListener("change", async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (!file || !vehicleId || !this._hass?.callWS) return;
-        const encoded = btoa(String.fromCharCode(...new Uint8Array(await file.arrayBuffer())));
-        await this._hass.callWS({ type: "smartcamper_suite/journal/import_gpx", vehicle_id: vehicleId, content_base64: encoded });
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const encoded = btoa(String.fromCharCode(...bytes));
+        const digest = await crypto.subtle.digest("SHA-256", bytes);
+        const file_hash = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+        await this._hass.callWS({ type: "smartcamper_suite/journal/import_gpx", vehicle_id: vehicleId, content_base64: encoded, file_hash });
       });
       this.querySelector<HTMLFormElement>(".journal-drive-form")?.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -143,13 +146,13 @@ class SmartCamperCard extends HTMLElement {
         this.render();
       });
       this.querySelectorAll<HTMLButtonElement>(".journal-drive-link").forEach((button) => button.addEventListener("click", () => {
-        if (vehicleId && tripId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/link_drives", trip_id: tripId, drive_ids: [button.dataset.driveId] });
+        if (vehicleId && tripId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/link_drives", vehicle_id: vehicleId, trip_id: tripId, drive_ids: [button.dataset.driveId] });
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-drive-unlink").forEach((button) => button.addEventListener("click", () => {
-        if (tripId && button.dataset.driveId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/unlink_drive", trip_id: tripId, drive_id: button.dataset.driveId });
+        if (vehicleId && tripId && button.dataset.driveId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/unlink_drive", vehicle_id: vehicleId, trip_id: tripId, drive_id: button.dataset.driveId });
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-drive-delete").forEach((button) => button.addEventListener("click", () => {
-        if (button.dataset.driveId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_manual_drive", drive_id: button.dataset.driveId });
+        if (vehicleId && button.dataset.driveId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_manual_drive", vehicle_id: vehicleId, drive_id: button.dataset.driveId });
       }));
       this.querySelector(".journal-route")?.addEventListener("click", () => {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/route", vehicle_id: vehicleId, trip_id: tripId });
@@ -158,14 +161,23 @@ class SmartCamperCard extends HTMLElement {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/generate_suggestions", vehicle_id: vehicleId, trip_id: tripId });
       });
       this.querySelectorAll<HTMLButtonElement>(".journal-suggestion-accept").forEach((button) => button.addEventListener("click", () => {
-        if (button.dataset.suggestionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/accept_suggestion", suggestion_id: button.dataset.suggestionId, trip_id: tripId });
+        if (vehicleId && button.dataset.suggestionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/accept_suggestion", vehicle_id: vehicleId, suggestion_id: button.dataset.suggestionId, trip_id: tripId });
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-suggestion-dismiss").forEach((button) => button.addEventListener("click", () => {
-        if (button.dataset.suggestionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/dismiss_suggestion", suggestion_id: button.dataset.suggestionId });
+        if (vehicleId && button.dataset.suggestionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/dismiss_suggestion", vehicle_id: vehicleId, suggestion_id: button.dataset.suggestionId });
       }));
       this.querySelector(".journal-stop-create")?.addEventListener("click", () => {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_stop", vehicle_id: vehicleId, trip_id: tripId, name: "Neuer Stopp", occurred_at: new Date().toISOString() });
       });
+      this.querySelector(".journal-stay-create")?.addEventListener("click", () => {
+        if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_stay", vehicle_id: vehicleId, trip_id: tripId, name: "Neuer Aufenthalt" });
+      });
+      this.querySelectorAll<HTMLButtonElement>(".journal-stay-edit").forEach((button) => button.addEventListener("click", () => {
+        if (vehicleId && button.dataset.stayId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/update_stay", vehicle_id: vehicleId, stay_id: button.dataset.stayId, name: "Bearbeiteter Aufenthalt" });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-stay-delete").forEach((button) => button.addEventListener("click", () => {
+        if (vehicleId && button.dataset.stayId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_stay", vehicle_id: vehicleId, stay_id: button.dataset.stayId });
+      }));
       this.querySelector(".journal-expense-create")?.addEventListener("click", () => {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/create_expense", vehicle_id: vehicleId, trip_id: tripId, category: "other", amount_minor: 0, currency: "EUR" });
       });
@@ -173,10 +185,22 @@ class SmartCamperCard extends HTMLElement {
         if (vehicleId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/diagnostics", vehicle_id: vehicleId });
       });
       this.querySelectorAll<HTMLButtonElement>(".journal-stop-delete").forEach((button) => button.addEventListener("click", () => {
-        if (button.dataset.stopId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_stop", stop_id: button.dataset.stopId });
+        if (vehicleId && button.dataset.stopId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_stop", vehicle_id: vehicleId, stop_id: button.dataset.stopId });
       }));
       this.querySelectorAll<HTMLButtonElement>(".journal-expense-delete").forEach((button) => button.addEventListener("click", () => {
-        if (button.dataset.expenseId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_expense", expense_id: button.dataset.expenseId });
+        if (vehicleId && button.dataset.expenseId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/delete_expense", vehicle_id: vehicleId, expense_id: button.dataset.expenseId });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-expense-edit").forEach((button) => button.addEventListener("click", () => {
+        if (vehicleId && button.dataset.expenseId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/update_expense", vehicle_id: vehicleId, expense_id: button.dataset.expenseId, note: "Bearbeitet" });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-rating-edit").forEach((button) => button.addEventListener("click", () => {
+        if (vehicleId && button.dataset.placeId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/upsert_rating", vehicle_id: vehicleId, place_id: button.dataset.placeId, overall: 5 });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-overnight-edit").forEach((button) => button.addEventListener("click", () => {
+        if (vehicleId && button.dataset.placeId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/upsert_overnight", vehicle_id: vehicleId, place_id: button.dataset.placeId, place_kind: "campsite" });
+      }));
+      this.querySelectorAll<HTMLButtonElement>(".journal-interruption-assign").forEach((button) => button.addEventListener("click", () => {
+        if (vehicleId && tripId && button.dataset.interruptionId && this._hass?.callWS) void this._hass.callWS({ type: "smartcamper_suite/journal/assign_interruption", vehicle_id: vehicleId, trip_id: tripId, interruption_id: button.dataset.interruptionId, status: "assigned" });
       }));
       return;
     }
@@ -311,7 +335,7 @@ class SmartCamperCard extends HTMLElement {
     this.journalDetailsLoading = true;
     try {
       const details = await this._hass.callWS({ type: "smartcamper_suite/journal/list", vehicle_id: vehicleId });
-      this.journalDetails = { vehicle_id: vehicleId, drives: details?.drives ?? [], suggestions: details?.suggestions ?? [], stays: details?.stays ?? [], stops: details?.stops ?? [], expenses: details?.expenses ?? [] };
+      this.journalDetails = { vehicle_id: vehicleId, drives: details?.drives ?? [], suggestions: details?.suggestions ?? [], stays: details?.stays ?? [], stops: details?.stops ?? [], expenses: details?.expenses ?? [], ratings: details?.ratings ?? [], overnights: details?.overnights ?? [], interruptions: details?.interruptions ?? [] };
       this.journalDetailsVehicle = vehicleId;
       this.render();
     } catch {

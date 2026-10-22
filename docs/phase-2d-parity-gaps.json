@@ -4,7 +4,7 @@
     "version": "v0.3.2",
     "commit": "11a98f966110d2e70aeb5181b66bc4d97c373623"
   },
-  "suite_commit_reviewed": "c8ffd7a05a1ca950051d023829d9aaea9f41c7db",
+  "suite_commit_reviewed": "pending-current-commit",
   "status": "open_gaps_are_concrete",
   "gaps": [
     {
@@ -16,7 +16,9 @@
       "user_impact": "A caller can address a trip by id without supplying the Stable vehicle scope.",
       "test": "tests/test_websocket_contract.py::test_contract_matrix_matches_documented_commands",
       "priority": "high",
-      "status": "open"
+      "status": "closed",
+      "closed_by": "vehicle_id-required-schemas-and-assert_vehicle_scope",
+      "result": "local regression passed"
     },
     {
       "id": "ws-vehicle-scope-mutations",
@@ -27,7 +29,9 @@
       "user_impact": "The same command cannot be validated against the selected vehicle in the Stable-compatible way.",
       "test": "tests/test_websocket_contract.py::test_contract_matrix_matches_documented_commands",
       "priority": "high",
-      "status": "open"
+      "status": "closed",
+      "closed_by": "vehicle_id-required-schemas-and-assert_vehicle_scope",
+      "result": "local regression passed"
     },
     {
       "id": "ws-import-gpx-file-hash",
@@ -38,7 +42,9 @@
       "user_impact": "A client cannot rely on the Stable request contract to prevent repeated file imports.",
       "test": "tests/test_journal.py::test_legacy_import_requires_opt_in_is_idempotent_and_preserves_source",
       "priority": "high",
-      "status": "open"
+      "status": "closed",
+      "closed_by": "file_hash-required-and-gpx_file_hash_mismatch-validation",
+      "result": "local regression passed"
     },
     {
       "id": "ws-route-processing",
@@ -49,7 +55,9 @@
       "user_impact": "Large tracks can exceed the requested rendering limit and simplification is not honored.",
       "test": "tests/test_journal_contract.py::test_route_contract_fields",
       "priority": "medium",
-      "status": "open"
+      "status": "closed",
+      "closed_by": "route_segments-simplification-and-point-limit",
+      "result": "local regression passed"
     },
     {
       "id": "ui-journal-editing",
@@ -60,7 +68,8 @@
       "user_impact": "Several Stable journal workflows are not reachable from the central Suite card.",
       "test": "frontend/tests/browser/card.spec.mjs::journal workflow assertions",
       "priority": "high",
-      "status": "open"
+      "status": "open",
+      "result": "Browser regression covers the new action controls, but full user-editable Stable workflows remain incomplete."
     },
     {
       "id": "ha-full-lifecycle",

@@ -185,3 +185,47 @@ def test_expense_historical_fields_round_trip(tmp_path):
     store.update_expense(expense_id, occurred_on="2026-01-03", odometer_km=12346.0)
     assert store.list_related("vehicle-a", trip_id)["expenses"][0]["occurred_on"] == "2026-01-03"
     store.close()
+
+
+def test_route_output_applies_point_limit_and_simplification_without_mutating_source(tmp_path):
+    store = JournalStore(tmp_path / "suite.sqlite")
+    for index in range(8):
+        store.add_gps_point("vehicle-a", 50.0 + index * 0.001, 8.0 + (index % 2) * 0.001, f"2026-01-01T10:0{index}:00+00:00")
+    drive_ids = store.auto_detect_drives("vehicle-a", min_movement_m=25, start_samples=2)
+    assert drive_ids
+    full = store.route_segments("vehicle-a", max_points=5000)
+    limited = store.route_segments("vehicle-a", max_points=3)
+    simplified = store.route_segments("vehicle-a", max_points=5000, simplify_tolerance_m=200)
+    assert len(full[0]["points"]) >= 6
+    assert len(limited[0]["points"]) == 3
+    assert limited[0]["points"][0]["recorded_at"] == full[0]["points"][0]["recorded_at"]
+    assert limited[0]["points"][-1]["recorded_at"] == full[0]["points"][-1]["recorded_at"]
+    assert len(simplified[0]["points"]) < len(full[0]["points"])
+    assert len(store.route_segments("vehicle-a", max_points=5000)[0]["points"]) == len(full[0]["points"])
+    with pytest.raises(ValueError, match="route_parameters_invalid"):
+        store.route_segments("vehicle-a", max_points=1)
+    store.close()
+
+
+def test_gpx_import_rejects_mismatched_file_hash(tmp_path):
+    store = JournalStore(tmp_path / "suite.sqlite")
+    gpx = b'<gpx><trk><trkseg><trkpt lat="50" lon="8"><time>2026-01-01T10:00:00Z</time></trkpt></trkseg></trk></gpx>'
+    preview = store.analyze_gpx(gpx, "vehicle-a")
+    with pytest.raises(ValueError, match="gpx_file_hash_mismatch"):
+        store.import_gpx(preview, expected_file_hash="wrong")
+    assert store.import_gpx(preview, expected_file_hash=preview["file_hash"])["imported"] is True
+    assert store.import_gpx(preview, expected_file_hash=preview["file_hash"])["reason"] == "already_imported"
+    store.close()
+
+
+def test_vehicle_scope_rejects_cross_vehicle_mutations(tmp_path):
+    store = JournalStore(tmp_path / "suite.sqlite")
+    trip_id = store.create_trip("vehicle-a", "A")
+    expense_id = store.create_expense("vehicle-a", trip_id=trip_id, category="fuel", amount_minor=100)
+    with pytest.raises(ValueError, match="vehicle_scope_mismatch"):
+        store.assert_vehicle_scope("vehicle-b", trip_id=trip_id)
+    with pytest.raises(ValueError, match="vehicle_scope_mismatch"):
+        store.assert_vehicle_scope("vehicle-b", expense_id=expense_id)
+    with pytest.raises(ValueError, match="trip_id_not_found"):
+        store.assert_vehicle_scope("vehicle-a", trip_id="missing")
+    store.close()

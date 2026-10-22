@@ -28,7 +28,7 @@
     "delete_expense", "delete_rating", "analyze_gpx", "import_gpx",
     "list_drives", "list_suggestions", "generate_suggestions",
     "accept_suggestion", "dismiss_suggestion", "upsert_overnight",
-    "upsert_rating", "auto_detect_drives"
+    "upsert_rating", "auto_detect_drives", "create_stay", "update_stay", "delete_stay"
   ],
   "mapping": {
     "list_stop_suggestions": "list_suggestions",

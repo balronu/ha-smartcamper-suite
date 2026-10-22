@@ -113,7 +113,7 @@ def async_register(hass: Any) -> None:
     async def ws_diagnostics(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
         selected = runtime(msg)
         summary = await hass.async_add_executor_job(selected.journal.store.summary, msg["vehicle_id"])
-        connection.send_result(msg["id"], {"database": selected.journal.store.path.name, "schema_version": 2, "module_enabled": selected.journal.enabled, "summary": summary})
+        connection.send_result(msg["id"], {"database": selected.journal.store.path.name, "schema_version": 4, "module_enabled": selected.journal.enabled, "summary": summary})
 
     @websocket_api.websocket_command({"type": "smartcamper_suite/journal/update_trip", "trip_id": str, vol.Optional("entry_id"): str, vol.Optional("title"): str, vol.Optional("description"): str, vol.Optional("destination"): str, vol.Optional("started_at"): str, vol.Optional("ended_at"): str, vol.Optional("status"): str, vol.Optional("start_date"): str, vol.Optional("end_date"): str})
     @websocket_api.async_response
@@ -138,11 +138,11 @@ def async_register(hass: Any) -> None:
         stop_id = await hass.async_add_executor_job(selected.journal.store.create_stop, msg["vehicle_id"], **fields)
         connection.send_result(msg["id"], {"stop_id": stop_id})
 
-    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/create_expense", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("occurred_at"): str, vol.Optional("category", default="other"): str, vol.Optional("amount_minor", default=0): int, vol.Optional("currency", default="EUR"): str, vol.Optional("note", default=""): str})
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/create_expense", "vehicle_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("occurred_at"): str, vol.Optional("occurred_on"): str, vol.Optional("occurred_time"): str, vol.Optional("category", default="other"): str, vol.Optional("amount_minor", default=0): int, vol.Optional("currency", default="EUR"): str, vol.Optional("note", default=""): str, vol.Optional("odometer_km"): float, vol.Optional("stay_id"): str, vol.Optional("place_id"): str})
     @websocket_api.async_response
     async def ws_create_expense(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
         selected = runtime(msg)
-        fields = {key: value for key, value in msg.items() if key in {"trip_id", "occurred_at", "category", "amount_minor", "currency", "note"}}
+        fields = {key: value for key, value in msg.items() if key in {"trip_id", "occurred_at", "occurred_on", "occurred_time", "category", "amount_minor", "currency", "note", "odometer_km", "stay_id", "place_id"}}
         expense_id = await hass.async_add_executor_job(selected.journal.store.create_expense, msg["vehicle_id"], **fields)
         connection.send_result(msg["id"], {"expense_id": expense_id})
 
@@ -190,6 +190,13 @@ def async_register(hass: Any) -> None:
         selected = runtime(msg)
         result = await hass.async_add_executor_job(selected.journal.store.list_drives, msg["vehicle_id"], msg.get("trip_id"))
         connection.send_result(msg["id"], {"drives": result})
+
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/auto_detect_drives", "vehicle_id": str, vol.Optional("entry_id"): str})
+    @websocket_api.async_response
+    async def ws_auto_detect_drives(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
+        selected = runtime(msg)
+        drive_ids = await hass.async_add_executor_job(selected.journal.store.auto_detect_drives, msg["vehicle_id"])
+        connection.send_result(msg["id"], {"drive_ids": drive_ids})
 
     @websocket_api.websocket_command({"type": "smartcamper_suite/journal/link_drives", "trip_id": str, "drive_ids": [str], vol.Optional("entry_id"): str})
     @websocket_api.async_response
@@ -256,11 +263,11 @@ def async_register(hass: Any) -> None:
         await hass.async_add_executor_job(selected.journal.store.delete_stop, msg["stop_id"])
         connection.send_result(msg["id"], {})
 
-    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/update_expense", "expense_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("occurred_at"): str, vol.Optional("category"): str, vol.Optional("amount_minor"): int, vol.Optional("currency"): str, vol.Optional("note"): str})
+    @websocket_api.websocket_command({"type": "smartcamper_suite/journal/update_expense", "expense_id": str, vol.Optional("entry_id"): str, vol.Optional("trip_id"): str, vol.Optional("occurred_at"): str, vol.Optional("occurred_on"): str, vol.Optional("occurred_time"): str, vol.Optional("category"): str, vol.Optional("amount_minor"): int, vol.Optional("currency"): str, vol.Optional("note"): str, vol.Optional("odometer_km"): float, vol.Optional("stay_id"): str, vol.Optional("place_id"): str})
     @websocket_api.async_response
     async def ws_update_expense(hass: Any, connection: Any, msg: dict[str, Any]) -> None:
         selected = runtime(msg)
-        fields = {key: value for key, value in msg.items() if key in {"trip_id", "occurred_at", "category", "amount_minor", "currency", "note"}}
+        fields = {key: value for key, value in msg.items() if key in {"trip_id", "occurred_at", "occurred_on", "occurred_time", "category", "amount_minor", "currency", "note", "odometer_km", "stay_id", "place_id"}}
         await hass.async_add_executor_job(selected.journal.store.update_expense, msg["expense_id"], **fields)
         connection.send_result(msg["id"], {})
 
@@ -277,7 +284,7 @@ def async_register(hass: Any) -> None:
         ws_dismiss_suggestion, ws_list_vehicles, ws_diagnostics, ws_update_trip,
         ws_delete_trip, ws_create_stop, ws_create_expense, ws_upsert_overnight,
         ws_upsert_rating, ws_delete_rating, ws_transition_trip, ws_route,
-        ws_list_drives, ws_link_drives, ws_unlink_drive, ws_create_manual_drive,
+        ws_list_drives, ws_auto_detect_drives, ws_link_drives, ws_unlink_drive, ws_create_manual_drive,
         ws_update_manual_drive, ws_delete_manual_drive, ws_assign_interruption,
         ws_create_stop_from_interruption, ws_update_stop, ws_delete_stop,
         ws_update_expense, ws_delete_expense,

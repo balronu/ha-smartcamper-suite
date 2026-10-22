@@ -155,3 +155,33 @@ def test_drive_and_historical_update_contracts_are_transactional(tmp_path):
     store.delete_manual_drive(drive_id)
     assert store.list_drives("vehicle-a") == []
     store.close()
+
+
+def test_automatic_drive_detection_is_gap_aware_and_idempotent(tmp_path):
+    store = JournalStore(tmp_path / "suite.sqlite")
+    store.add_gps_point("vehicle-a", 50.0000, 8.0000, "2026-01-01T10:00:00+00:00")
+    store.add_gps_point("vehicle-a", 50.0010, 8.0000, "2026-01-01T10:01:00+00:00")
+    store.add_gps_point("vehicle-a", 50.0020, 8.0000, "2026-01-01T10:02:00+00:00")
+    store.add_gps_point("vehicle-a", 50.0020, 8.0000, "2026-01-01T10:12:00+00:00")
+    detected = store.auto_detect_drives("vehicle-a")
+    assert len(detected) == 1
+    assert store.list_drives("vehicle-a")[0]["source"] == "gps_auto"
+    assert store.list_drives("vehicle-a")[0]["end_reason"] == "stationary_timeout"
+    assert len(store.route_segments("vehicle-a")[0]["points"]) == 3
+    assert store.auto_detect_drives("vehicle-a") == detected
+    store.close()
+
+
+def test_expense_historical_fields_round_trip(tmp_path):
+    store = JournalStore(tmp_path / "suite.sqlite")
+    trip_id = store.create_trip("vehicle-a", "Kostenfelder")
+    stop_id = store.create_stop("vehicle-a", trip_id=trip_id, name="Camping")
+    expense_id = store.create_expense("vehicle-a", trip_id=trip_id, category="camping", amount_minor=4200, occurred_on="2026-01-02", occurred_time="18:30", odometer_km=12345.6, stay_id=stop_id, place_id=stop_id)
+    row = store.list_related("vehicle-a", trip_id)["expenses"][0]
+    assert row["occurred_on"] == "2026-01-02"
+    assert row["occurred_time"] == "18:30"
+    assert row["odometer_km"] == 12345.6
+    assert row["stay_id"] == stop_id and row["place_id"] == stop_id
+    store.update_expense(expense_id, occurred_on="2026-01-03", odometer_km=12346.0)
+    assert store.list_related("vehicle-a", trip_id)["expenses"][0]["occurred_on"] == "2026-01-03"
+    store.close()

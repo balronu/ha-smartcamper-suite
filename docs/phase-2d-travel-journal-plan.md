@@ -32,7 +32,7 @@ weder automatisch gesucht noch geöffnet.
 
 ## Datenbank- und Importgrenzen
 
-- Schema-Version 3, WAL, Foreign Keys, Busy Timeout und transaktionale CRUDs.
+- Schema-Version 4, WAL, Foreign Keys, Busy Timeout und transaktionale CRUDs.
 - GPX-Fahrten persistieren geordnete GPS-Punktreferenzen in `drive_gps_points`; der
   Route-Endpunkt liefert die gespeicherte Geometrie inklusive Start-/Endkoordinaten.
 - Kein automatisches Öffnen einer `camper_travel_journal`-Datenbank.
@@ -54,9 +54,9 @@ Die Stable-Integration registriert 31 Kommandos; die Suite verwendet für
 Vorschläge und Übernachtungen teilweise bewusst sprechendere Namen
 (`list_suggestions`/`generate_suggestions`/`accept_suggestion` sowie
 `upsert_overnight`/`upsert_rating`) statt der historischen Stable-Namen.
-Einzelne Stable-Felder und Antwortformate, insbesondere die automatische
-Bewegungs-/Lückensegmentierung und alle historischen Detail-Editoren, sind noch
-nicht vollständig gleichwertig abgebildet. Diese Lücke ist ein NO-GO für vollständige
+Einzelne Stable-Felder und Antwortformate, insbesondere alle historischen
+Detail-Editoren und die vollständige Stable-Parametersemantik, sind noch nicht
+vollständig gleichwertig abgebildet. Diese Lücke ist ein NO-GO für vollständige
 Stable-Parität.
 
 Der PDF-Export ist ein dependency-freier, mehrseitiger Suite-Bericht mit den

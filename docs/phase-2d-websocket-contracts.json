@@ -28,7 +28,7 @@
     "delete_expense", "delete_rating", "analyze_gpx", "import_gpx",
     "list_drives", "list_suggestions", "generate_suggestions",
     "accept_suggestion", "dismiss_suggestion", "upsert_overnight",
-    "upsert_rating"
+    "upsert_rating", "auto_detect_drives"
   ],
   "mapping": {
     "list_stop_suggestions": "list_suggestions",
@@ -70,6 +70,7 @@
     "dismiss_stop_suggestion": {"stable_required": ["vehicle_id", "suggestion_id"], "suite_required": ["suggestion_id"], "response": "empty success"},
     "analyze_gpx": {"stable_required": ["vehicle_id", "content_base64"], "suite_required": ["vehicle_id", "content_base64"], "response": "points[],drives[],warnings"},
     "import_gpx": {"stable_required": ["vehicle_id", "content_base64", "file_hash"], "suite_required": ["vehicle_id", "content_base64"], "response": "point_count,drives_imported"}
+    ,"auto_detect_drives": {"stable_required": [], "suite_required": ["vehicle_id"], "response": "drive_ids[]"}
   },
   "contract_status": {
     "authentication": "HA authenticated websocket boundary",

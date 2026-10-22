@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
-JOURNAL_SCHEMA_VERSION = 3
+JOURNAL_SCHEMA_VERSION = 4
 TRIP_STATUSES = {"planned", "active", "completed", "cancelled"}
 EXPENSE_CATEGORIES = {"camping", "fuel", "toll", "parking", "food", "activities", "other"}
 
@@ -90,7 +90,9 @@ class JournalStore:
                 CREATE TABLE IF NOT EXISTS expenses(
                   id TEXT PRIMARY KEY, vehicle_id TEXT NOT NULL, trip_id TEXT,
                   occurred_at TEXT NOT NULL, category TEXT NOT NULL, amount_minor INTEGER NOT NULL,
-                  currency TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                  currency TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', odometer_km REAL,
+                  stay_id TEXT, place_id TEXT, occurred_on TEXT, occurred_time TEXT,
+                  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
                   FOREIGN KEY(trip_id) REFERENCES trips(id) ON DELETE SET NULL
                 );
                 CREATE TABLE IF NOT EXISTS gps_points(
@@ -103,7 +105,8 @@ class JournalStore:
                   ended_at TEXT NOT NULL, distance_m REAL, source TEXT NOT NULL DEFAULT 'manual',
                   start_label TEXT, end_label TEXT, manual_distance_km REAL,
                   end_reason TEXT, start_latitude REAL, start_longitude REAL,
-                  end_latitude REAL, end_longitude REAL, created_at TEXT NOT NULL
+                  end_latitude REAL, end_longitude REAL, detection_key TEXT,
+                  created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS drive_gps_points(
                   drive_id TEXT NOT NULL REFERENCES drives(id) ON DELETE CASCADE,
@@ -170,6 +173,12 @@ class JournalStore:
             for column in ("end_reason", "start_latitude", "start_longitude", "end_latitude", "end_longitude"):
                 if column not in drive_columns:
                     self.connection.execute(f"ALTER TABLE drives ADD COLUMN {column} {'TEXT' if column == 'end_reason' else 'REAL'}")
+            if "detection_key" not in drive_columns:
+                self.connection.execute("ALTER TABLE drives ADD COLUMN detection_key TEXT")
+            expense_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(expenses)")}
+            for column in ("odometer_km", "stay_id", "place_id", "occurred_on", "occurred_time"):
+                if column not in expense_columns:
+                    self.connection.execute(f"ALTER TABLE expenses ADD COLUMN {column} {'REAL' if column == 'odometer_km' else 'TEXT'}")
 
     def _row(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
         return dict(row) if row is not None else None
@@ -238,7 +247,7 @@ class JournalStore:
             raise ValueError("expense_invalid")
         expense_id, now = _id("expense"), _now()
         with self._lock, self.connection:
-            self.connection.execute("INSERT INTO expenses(id,vehicle_id,trip_id,occurred_at,category,amount_minor,currency,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (expense_id, vehicle_id, fields.get("trip_id"), fields.get("occurred_at", now), category, amount, str(fields.get("currency", "EUR")).upper(), fields.get("note", ""), now, now))
+            self.connection.execute("INSERT INTO expenses(id,vehicle_id,trip_id,occurred_at,category,amount_minor,currency,note,odometer_km,stay_id,place_id,occurred_on,occurred_time,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (expense_id, vehicle_id, fields.get("trip_id"), fields.get("occurred_at", now), category, amount, str(fields.get("currency", "EUR")).upper(), fields.get("note", ""), fields.get("odometer_km"), fields.get("stay_id"), fields.get("place_id") or fields.get("stay_id"), fields.get("occurred_on"), fields.get("occurred_time"), now, now))
         return expense_id
 
     def update_stop(self, stop_id: str, **fields: Any) -> None:
@@ -256,7 +265,7 @@ class JournalStore:
             self.connection.execute("DELETE FROM stops WHERE id=?", (stop_id,))
 
     def update_expense(self, expense_id: str, **fields: Any) -> None:
-        allowed = {"trip_id", "occurred_at", "category", "amount_minor", "currency", "note"}
+        allowed = {"trip_id", "occurred_at", "category", "amount_minor", "currency", "note", "odometer_km", "stay_id", "place_id", "occurred_on", "occurred_time"}
         values = {key: value for key, value in fields.items() if key in allowed}
         if "category" in values and values["category"] not in EXPENSE_CATEGORIES:
             raise ValueError("expense_category_invalid")
@@ -383,6 +392,78 @@ class JournalStore:
             raise ValueError("coordinates_invalid")
         with self._lock, self.connection:
             self.connection.execute("INSERT OR IGNORE INTO gps_points(vehicle_id,recorded_at,latitude,longitude,accuracy_m) VALUES(?,?,?,?,?)", (vehicle_id, recorded_at or _now(), latitude, longitude, accuracy_m))
+
+    def auto_detect_drives(self, vehicle_id: str, *, min_movement_m: float = 25.0, start_samples: int = 2, stop_after_seconds: int = 600, max_gap_seconds: int = 600, max_speed_kmh: float = 200.0) -> list[str]:
+        """Detect conservative GPS drives using the Stable state-machine rules.
+
+        The operation is idempotent through a vehicle/start/end fingerprint and
+        never bridges a GPS outage or an implausible-speed jump.
+        """
+        with self._lock:
+            points = [dict(row) for row in self.connection.execute("SELECT id,recorded_at,latitude,longitude FROM gps_points WHERE vehicle_id=? ORDER BY recorded_at,id", (vehicle_id,)).fetchall()]
+        if not points or start_samples < 1 or min_movement_m <= 0 or stop_after_seconds < 1 or max_gap_seconds < 1 or max_speed_kmh <= 0:
+            return []
+        detected: list[dict[str, Any]] = []
+        state = "stopped"
+        candidate_count = 0
+        drive_start = last_moving = None
+        distance = 0.0
+
+        def finish(end_point: dict[str, Any], reason: str) -> None:
+            nonlocal state, candidate_count, drive_start, last_moving, distance
+            if drive_start is None:
+                return
+            detected.append({"start": drive_start, "end": end_point, "reason": reason, "distance_m": distance})
+            state, candidate_count, drive_start, last_moving, distance = "stopped", 0, None, None, 0.0
+
+        for previous, current in itertools.pairwise(points):
+            previous_time = datetime.fromisoformat(previous["recorded_at"])
+            current_time = datetime.fromisoformat(current["recorded_at"])
+            elapsed = (current_time - previous_time).total_seconds()
+            if elapsed <= 0:
+                continue
+            if elapsed > max_gap_seconds:
+                if state == "driving":
+                    finish(previous, "gps_gap")
+                state, candidate_count = "gps_gap", 0
+                continue
+            segment_distance = _distance_m(previous["latitude"], previous["longitude"], current["latitude"], current["longitude"])
+            speed = segment_distance / elapsed * 3.6
+            if speed > max_speed_kmh:
+                continue
+            moved = segment_distance >= min_movement_m
+            if moved:
+                if state in {"stopped", "gps_gap", "start_candidate"}:
+                    candidate_count += 1
+                    state = "start_candidate"
+                    if candidate_count >= start_samples:
+                        state, drive_start, last_moving, distance = "driving", previous, current, segment_distance
+                elif state == "driving":
+                    distance += segment_distance
+                    last_moving = current
+            elif state == "driving" and last_moving is not None:
+                if (current_time - datetime.fromisoformat(last_moving["recorded_at"])).total_seconds() >= stop_after_seconds:
+                    finish(current, "stationary_timeout")
+            elif state == "start_candidate":
+                state, candidate_count = "stopped", 0
+        if state == "driving":
+            finish(points[-1], "track_end")
+        created: list[str] = []
+        with self._lock, self.connection:
+            for item in detected:
+                start, end = item["start"], item["end"]
+                key = hashlib.sha256(f"{vehicle_id}|{start['recorded_at']}|{end['recorded_at']}".encode()).hexdigest()
+                existing = self.connection.execute("SELECT id FROM drives WHERE detection_key=?", (key,)).fetchone()
+                if existing is not None:
+                    created.append(str(existing[0]))
+                    continue
+                drive_id = _id("drive")
+                self.connection.execute("INSERT INTO drives(id,vehicle_id,started_at,ended_at,distance_m,source,end_reason,start_latitude,start_longitude,end_latitude,end_longitude,detection_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (drive_id, vehicle_id, start["recorded_at"], end["recorded_at"], item["distance_m"], "gps_auto", item["reason"], start["latitude"], start["longitude"], end["latitude"], end["longitude"], key, _now()))
+                selected = self.connection.execute("SELECT id FROM gps_points WHERE vehicle_id=? AND recorded_at>=? AND recorded_at<=? ORDER BY recorded_at,id", (vehicle_id, start["recorded_at"], end["recorded_at"])).fetchall()
+                for ordinal, point in enumerate(selected):
+                    self.connection.execute("INSERT OR IGNORE INTO drive_gps_points(drive_id,gps_point_id,ordinal,association_source) VALUES(?,?,?,?)", (drive_id, point[0], ordinal, "auto"))
+                created.append(drive_id)
+        return created
 
     def upsert_overnight(self, place_id: str, **fields: Any) -> None:
         now = _now()
@@ -755,6 +836,7 @@ class JournalRuntime:
             except (KeyError, TypeError, ValueError):
                 return
             await hass.async_add_executor_job(self.store.add_gps_point, vehicle_id, latitude, longitude)
+            await hass.async_add_executor_job(self.store.auto_detect_drives, vehicle_id)
 
         self._unsub = hass.bus.async_listen("state_changed", on_state_changed)
 

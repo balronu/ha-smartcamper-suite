@@ -2,7 +2,7 @@
 
 [Deutsch](README.md) | [English](README.en.md)
 
-**Öffentliche Test-Beta: `v0.3.0-beta.4` (Phase-2G-Kandidat).**
+**Experimentelle Test-Beta: `v0.3.0-beta.5` (Phase-2I/2J-UI-Kandidat).**
 
 Die Stable-Integrationen bleiben die Produktionsreferenz. Diese Beta ist nur
 für einen isolierten, kontrollierten Home-Assistant-Test vorgesehen.
@@ -25,8 +25,7 @@ Karte `custom:smartcamper-card`.
 Die Beta kann über **HACS → Integrationen → Benutzerdefinierte Repositories**
 installiert werden. Repository hinzufügen:
 `https://github.com/balronu/ha-smartcamper-suite`, Typ **Integration**.
-Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.4` installieren,
-sobald der Release veröffentlicht ist.
+Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.5` installieren.
 Nach der Installation Home Assistant neu starten und die Suite unter
 **Einstellungen → Geräte & Dienste** als separaten Config Entry hinzufügen.
 Bestehende Stable-Integrationen werden nicht ersetzt oder entfernt.
@@ -44,7 +43,7 @@ automatische/bewegungsabhängige Aktualisierung und manuelle Aktualisierung.
 OAuth-Aktualisierung und Legacy-Migration sind isoliert getestet; kein Legacy-
 Entry wird automatisch verändert.
 
-Dies ist eine kontrollierte Test-Beta und keine Stable-Version. Die Suite
+Dies ist eine experimentelle kontrollierte Test-Beta und keine Stable-Version. Die Suite
 öffnet oder migriert keine produktive Datenbank, verwendet in Tests keine
 echten Zugangsdaten, führt in Tests keine Live-API-Aufrufe aus und wird nicht
 auf Home-Assistant-VM 104 installiert. Die drei Stable-Integrationen bleiben
@@ -70,6 +69,11 @@ beschrieben.
 
 Die Vorbereitung des ersten isolierten HA-Praxistests steht in
 [docs/phase-2d-home-assistant-practical-test.md](docs/phase-2d-home-assistant-practical-test.md).
+
+Die verbindliche Prüfreihenfolge für Beta5 steht in
+[docs/releases/v0.3.0-beta.5.md](docs/releases/v0.3.0-beta.5.md). Kartenpicker,
+HA-Neustart und HACS-Updateanzeige müssen im manuellen isolierten Praxistest
+noch bestätigt werden.
 
 ## Module
 

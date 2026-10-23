@@ -377,6 +377,10 @@ class FuelStationsRuntime:
         self.credential_getter = credential_getter
         self.results: dict[tuple[str, str], list[FuelStation]] = {}
         self.status: dict[str, dict[str, object]] = {}
+        self.provider_status: dict[str, dict[str, object]] = {
+            provider: {"state": "not_configured", "error": None}
+            for provider in ("tankerkoenig", "petromap", "nakordoni")
+        }
         self._cache: dict[tuple[str, str, str, float, float, float, int], list[FuelStation]] = {}
         self._inflight: dict[tuple[str, str, str, float, float, float, int], asyncio.Task[list[FuelStation]]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -469,6 +473,10 @@ class FuelStationsRuntime:
         if vehicle is None or vehicle.archived:
             raise FuelConfigurationError("vehicle is missing or archived")
         self.status[vehicle_id] = {"state": "loading", "error": None}
+        self.provider_status = {
+            provider: {"state": "not_configured", "error": None}
+            for provider in ("tankerkoenig", "petromap", "nakordoni")
+        }
         fuels = vehicle.fuel_types or ["diesel"]
         combined: list[FuelStation] = []
         for fuel in fuels:
@@ -490,6 +498,7 @@ class FuelStationsRuntime:
                 credential = self.credential_getter(account["credential_id"])
                 if not credential:
                     continue
+                self.provider_status[provider] = {"state": "ready", "error": None}
                 query = FuelSearchQuery(vehicle_id, latitude, longitude, vehicle.fuel_radius_km, fuel, vehicle.fuel_station_count)
                 credential_id = account["credential_id"]
                 key = (credential_id, provider, fuel, round(latitude, 5), round(longitude, 5), vehicle.fuel_radius_km, vehicle.fuel_station_count)
@@ -506,8 +515,19 @@ class FuelStationsRuntime:
                     self._inflight[key] = task
                 try:
                     combined.extend(await task)
+                    self.provider_status[provider] = {"state": "ready", "error": None}
                     break
-                except (FuelAuthError, FuelPermissionError, FuelUnavailableError, FuelRateLimitError):
+                except FuelAuthError as err:
+                    self.provider_status[provider] = {"state": "auth_error", "error": str(err)}
+                    continue
+                except FuelPermissionError as err:
+                    self.provider_status[provider] = {"state": "permission_error", "error": str(err)}
+                    continue
+                except FuelRateLimitError as err:
+                    self.provider_status[provider] = {"state": "rate_limited", "error": str(err)}
+                    continue
+                except FuelUnavailableError as err:
+                    self.provider_status[provider] = {"state": "unavailable", "error": str(err)}
                     continue
                 finally:
                     self._inflight.pop(key, None)

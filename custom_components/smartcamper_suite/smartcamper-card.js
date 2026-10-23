@@ -9593,9 +9593,13 @@ function renderJournalHtml(journal, config) {
   return `<article class="journal-card"><header><strong>Camper Travel Journal</strong><small>${escapeHtml(journal.vehicle_id)}</small></header>${active}${diagnostics}${driveSection}${suggestionSection}${recordSection}<div class="journal-actions"><button type="button" class="journal-create" data-dialog="trip-create">Neue Reise</button>${journal.active_trip ? '<button type="button" class="journal-pdf">PDF exportieren</button>' : ""}<label class="journal-gpx-label">GPX importieren<input type="file" class="journal-gpx" accept=".gpx,application/gpx+xml" /></label></div></article>`;
 }
 var DEFAULT_LOGO_PATH = "/smartcamper_suite/logos/";
-function selectVehicle(config, states) {
+function selectVehicle(config, states, profiles = []) {
   if (config.vehicle_id) return config.vehicle_id;
+  if (profiles.length) return profiles[0].vehicle_id;
   return Object.values(states).find((state) => state.attributes?.vehicle_id)?.attributes?.vehicle_id;
+}
+function vehicleName(vehicleId, profiles) {
+  return profiles.find((profile) => profile.vehicle_id === vehicleId)?.name;
 }
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (character) => ({
@@ -9715,6 +9719,9 @@ var SmartCamperCard = class extends HTMLElement {
   journalDetails;
   journalDetailsVehicle;
   journalDetailsLoading = false;
+  vehicleProfiles = [];
+  vehicleProfilesLoading = false;
+  vehicleProfilesLoaded = false;
   journalError(message) {
     return message instanceof Error ? message.message : String(message ?? "Unbekannter Fehler");
   }
@@ -9776,38 +9783,93 @@ var SmartCamperCard = class extends HTMLElement {
   }
   set hass(value) {
     this._hass = value;
+    void this.loadVehicleProfiles();
     this.render();
   }
   get hass() {
     return this._hass;
   }
+  async loadVehicleProfiles() {
+    if (this.vehicleProfilesLoading || this.vehicleProfilesLoaded || !this._hass?.callWS) return;
+    this.vehicleProfilesLoading = true;
+    try {
+      const result = await this._hass.callWS({ type: "smartcamper_suite/journal/list_vehicles" });
+      if (Array.isArray(result?.vehicles)) {
+        this.vehicleProfiles = result.vehicles.filter((item) => {
+          const value = item;
+          return typeof value.vehicle_id === "string" && typeof value.name === "string";
+        });
+        this.vehicleProfilesLoaded = true;
+        this.render();
+      }
+    } catch {
+    } finally {
+      this.vehicleProfilesLoading = false;
+    }
+  }
   static getConfigElement() {
     const editor = document.createElement("div");
     const baseConfig = { type: "custom:smartcamper-card", module: "fuel_stations" };
     let currentConfig = { ...baseConfig };
-    editor.innerHTML = `
-      <label>Modul <select data-field="module">
-        <option value="travel_journal">Camper Travel Journal</option>
-        <option value="fuel_stations">Mobile Fuel Stations</option>
-        <option value="route_planner">Camper Route Planner</option>
+    editor.innerHTML = `<style>
+      .smartcamper-card-editor{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);padding:4px 0}
+      .smartcamper-card-editor .field-group{display:grid;gap:8px;padding:12px;border:1px solid var(--divider-color,#ddd);border-radius:10px}
+      .smartcamper-card-editor label{display:grid;gap:5px;min-width:0}
+      .smartcamper-card-editor input,.smartcamper-card-editor select{box-sizing:border-box;max-width:100%;min-height:38px;padding:7px;border:1px solid var(--divider-color,#aaa);border-radius:6px;background:var(--card-background-color,#fff);color:inherit}
+      .smartcamper-card-editor .coordinates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+      @media(max-width:500px){.smartcamper-card-editor .coordinates{grid-template-columns:1fr}}
+    </style>
+      <label data-label="module">Modul <select data-field="module">
+        <option value="travel_journal" data-label="module_travel_journal">Camper Travel Journal</option>
+        <option value="fuel_stations" data-label="module_fuel_stations">Mobile Fuel Stations</option>
+        <option value="route_planner" data-label="module_route_planner">Camper Route Planner</option>
       </select></label>
-      <label>Fahrzeug <input data-field="vehicle_id" placeholder="Fahrzeug-ID (optional)" /></label>
-      <label>Darstellung <select data-field="display_mode"><option value="detailed">Detailed</option><option value="compact">Compact</option><option value="individual">Individual</option></select></label>
-      <label>Layout <select data-field="custom_layout"><option value="list">Liste</option><option value="highlights_list">Highlights + Liste</option><option value="configured_list">Konfiguriert</option></select></label>
-      <label>Sortierung <select data-field="sort_mode"><option value="distance">Entfernung</option><option value="price">Preis</option></select></label>
-      <label>Anzahl <input data-field="visible_station_count" type="number" min="0" /></label>
-      <label>Navigation <select data-field="navigation_provider"><option value="auto">Automatisch</option><option value="apple">Apple</option><option value="google">Google</option><option value="waze">Waze</option></select></label>
-      <label>Abrufmodus <select data-field="fetch_mode"><option value="automatic">Automatisch</option><option value="manual">Manuell</option></select></label>
-      <label>Route Start (JSON) <input data-field="origin" placeholder='{"latitude":50,"longitude":8}' /></label>
-      <label>Route Ziel (JSON) <input data-field="destination" placeholder='{"latitude":51,"longitude":9}' /></label>
-      <label><input data-field="show_prices" type="checkbox" checked /> Preise</label>
-      <label><input data-field="show_name" type="checkbox" checked /> Tankstellenname</label>
-      <label><input data-field="show_distance" type="checkbox" checked /> Entfernung</label>
-      <label><input data-field="show_address" type="checkbox" checked /> Adresse</label>
-      <label><input data-field="show_status" type="checkbox" checked /> Status</label>
-      <label><input data-field="show_brand_logos" type="checkbox" checked /> Anbieterlogos</label>
-      <label><input data-field="show_diagnostics" type="checkbox" checked /> Diagnostik</label>
-      <label><input data-field="show_refresh" type="checkbox" checked /> Aktualisieren</label>`;
+      <label data-label="vehicle">Fahrzeug <select data-field="vehicle_id"><option value="" data-label="vehicle_auto">Automatisch ausw\xE4hlen</option></select></label>
+      <label data-label="display_mode">Darstellung <select data-field="display_mode"><option value="detailed" data-label="display_detailed">Detailliert</option><option value="compact" data-label="display_compact">Kompakt</option><option value="individual" data-label="display_individual">Einzeln</option></select></label>
+      <label data-label="custom_layout">Layout <select data-field="custom_layout"><option value="list" data-label="layout_list">Liste</option><option value="highlights_list" data-label="layout_highlights">Highlights + Liste</option><option value="configured_list" data-label="layout_configured">Konfiguriert</option></select></label>
+      <label data-label="sort_mode">Sortierung <select data-field="sort_mode"><option value="distance" data-label="sort_distance">Entfernung</option><option value="price" data-label="sort_price">Preis</option></select></label>
+      <label data-label="visible_station_count">Anzahl <input data-field="visible_station_count" type="number" min="0" /></label>
+      <label data-label="navigation_provider">Navigation <select data-field="navigation_provider"><option value="auto" data-label="navigation_auto">Automatisch</option><option value="apple">Apple</option><option value="google">Google</option><option value="waze">Waze</option></select></label>
+      <label data-label="fetch_mode">Abrufmodus <select data-field="fetch_mode"><option value="automatic" data-label="fetch_automatic">Automatisch</option><option value="manual" data-label="fetch_manual">Manuell</option></select></label>
+      <fieldset class="field-group" data-group="route"><legend data-label="route_points">Routenpunkte</legend><div class="coordinates"><label data-label="origin_latitude">Start-Breite <input data-field="origin_latitude" type="number" step="any" /></label><label data-label="origin_longitude">Start-L\xE4nge <input data-field="origin_longitude" type="number" step="any" /></label><label data-label="destination_latitude">Ziel-Breite <input data-field="destination_latitude" type="number" step="any" /></label><label data-label="destination_longitude">Ziel-L\xE4nge <input data-field="destination_longitude" type="number" step="any" /></label></div></fieldset>
+      <label data-label="show_prices"><input data-field="show_prices" type="checkbox" checked /> Preise</label>
+      <label data-label="show_name"><input data-field="show_name" type="checkbox" checked /> Tankstellenname</label>
+      <label data-label="show_distance"><input data-field="show_distance" type="checkbox" checked /> Entfernung</label>
+      <label data-label="show_address"><input data-field="show_address" type="checkbox" checked /> Adresse</label>
+      <label data-label="show_status"><input data-field="show_status" type="checkbox" checked /> Status</label>
+      <label data-label="show_brand_logos"><input data-field="show_brand_logos" type="checkbox" checked /> Anbieterlogos</label>
+      <label data-label="show_diagnostics"><input data-field="show_diagnostics" type="checkbox" checked /> Diagnostik</label>
+      <label data-label="show_refresh"><input data-field="show_refresh" type="checkbox" checked /> Aktualisieren</label>`;
+    editor.className = "smartcamper-card-editor";
+    const editorText = {
+      de: { module: "Modul", module_travel_journal: "Camper Travel Journal", module_fuel_stations: "Mobile Fuel Stations", module_route_planner: "Camper Route Planner", vehicle: "Fahrzeug", vehicle_auto: "Automatisch ausw\xE4hlen", display_mode: "Darstellung", display_detailed: "Detailliert", display_compact: "Kompakt", display_individual: "Einzeln", custom_layout: "Layout", layout_list: "Liste", layout_highlights: "Highlights + Liste", layout_configured: "Konfiguriert", sort_mode: "Sortierung", sort_distance: "Entfernung", sort_price: "Preis", visible_station_count: "Anzahl", navigation_provider: "Navigation", navigation_auto: "Automatisch", fetch_mode: "Abrufmodus", fetch_automatic: "Automatisch", fetch_manual: "Manuell", route_points: "Routenpunkte", origin_latitude: "Start-Breite", origin_longitude: "Start-L\xE4nge", destination_latitude: "Ziel-Breite", destination_longitude: "Ziel-L\xE4nge", show_prices: "Preise", show_name: "Tankstellenname", show_distance: "Entfernung", show_address: "Adresse", show_status: "Status", show_brand_logos: "Anbieterlogos", show_diagnostics: "Diagnostik", show_refresh: "Aktualisieren" },
+      en: { module: "Module", module_travel_journal: "Camper Travel Journal", module_fuel_stations: "Mobile Fuel Stations", module_route_planner: "Camper Route Planner", vehicle: "Vehicle", vehicle_auto: "Select automatically", display_mode: "Display", display_detailed: "Detailed", display_compact: "Compact", display_individual: "Individual", custom_layout: "Layout", layout_list: "List", layout_highlights: "Highlights + list", layout_configured: "Configured", sort_mode: "Sort order", sort_distance: "Distance", sort_price: "Price", visible_station_count: "Number of stations", navigation_provider: "Navigation", navigation_auto: "Automatic", fetch_mode: "Fetch mode", fetch_automatic: "Automatic", fetch_manual: "Manual", route_points: "Route points", origin_latitude: "Start latitude", origin_longitude: "Start longitude", destination_latitude: "Destination latitude", destination_longitude: "Destination longitude", show_prices: "Prices", show_name: "Station name", show_distance: "Distance", show_address: "Address", show_status: "Status", show_brand_logos: "Provider logos", show_diagnostics: "Diagnostics", show_refresh: "Refresh" }
+    };
+    const applyEditorLanguage = () => {
+      const language = editorText[editor._hass?.locale?.language === "en" ? "en" : "de"];
+      editor.querySelectorAll("[data-label]").forEach((element) => {
+        const key = element.dataset.label;
+        const text = language[key];
+        if (text) {
+          if (element.tagName === "LABEL" && element.firstChild) element.firstChild.textContent = `${text} `;
+          else element.textContent = text;
+        }
+      });
+    };
+    const refreshVehicles = (profiles = []) => {
+      const select = editor.querySelector("[data-field=vehicle_id]");
+      const selected = select.value;
+      select.innerHTML = `<option value="">Automatisch ausw\xE4hlen</option>${profiles.map((profile) => `<option value="${profile.vehicle_id}">${profile.name}</option>`).join("")}`;
+      select.value = profiles.some((profile) => profile.vehicle_id === selected) ? selected : "";
+    };
+    const updateVisibility = () => {
+      const module = editor.querySelector("[data-field=module]").value;
+      editor.querySelector("[data-group=route]").hidden = module !== "route_planner";
+      for (const field of ["display_mode", "custom_layout", "sort_mode", "visible_station_count", "show_prices", "show_name", "show_distance", "show_address", "show_status", "show_brand_logos", "show_diagnostics", "show_refresh"]) {
+        const element = editor.querySelector(`[data-field=${field}]`);
+        if (element) element.closest("label")?.toggleAttribute("hidden", module !== "fuel_stations");
+      }
+    };
     const applyConfig = (config) => {
       currentConfig = { ...baseConfig, ...config };
       const setValue = (field, value) => {
@@ -9821,11 +9883,17 @@ var SmartCamperCard = class extends HTMLElement {
       setValue("sort_mode", currentConfig.sort_mode ?? "distance");
       setValue("visible_station_count", currentConfig.visible_station_count);
       setValue("navigation_provider", currentConfig.navigation_provider ?? "auto");
-      setValue("fetch_mode", currentConfig.fetch_mode ?? "automatic");
+      setValue("fetch_mode", currentConfig.fetch_mode ?? "manual");
+      setValue("origin_latitude", currentConfig.origin?.latitude);
+      setValue("origin_longitude", currentConfig.origin?.longitude);
+      setValue("destination_latitude", currentConfig.destination?.latitude);
+      setValue("destination_longitude", currentConfig.destination?.longitude);
       for (const field of ["show_prices", "show_name", "show_distance", "show_address", "show_status", "show_brand_logos", "show_diagnostics", "show_refresh"]) {
         const element = editor.querySelector(`[data-field=${field}]`);
         if (element && currentConfig[field] != null) element.checked = currentConfig[field] !== false;
       }
+      updateVisibility();
+      applyEditorLanguage();
     };
     editor.setConfig = applyConfig;
     const emit = () => {
@@ -9837,13 +9905,10 @@ var SmartCamperCard = class extends HTMLElement {
       const navigation_provider = editor.querySelector("[data-field=navigation_provider]").value;
       const fetch_mode = editor.querySelector("[data-field=fetch_mode]").value;
       const visible_station_count = Number(editor.querySelector("[data-field=visible_station_count]").value) || 0;
-      const parsePoint = (field) => {
-        try {
-          const value = JSON.parse(editor.querySelector(`[data-field=${field}]`).value);
-          return value.latitude != null && value.longitude != null ? value : void 0;
-        } catch {
-          return void 0;
-        }
+      const parsePoint = (prefix) => {
+        const latitude = Number(editor.querySelector(`[data-field=${prefix}_latitude]`).value);
+        const longitude = Number(editor.querySelector(`[data-field=${prefix}_longitude]`).value);
+        return Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : void 0;
       };
       const bool = (field) => editor.querySelector(`[data-field=${field}]`).checked;
       editor.dispatchEvent(new CustomEvent("config-changed", {
@@ -9852,7 +9917,21 @@ var SmartCamperCard = class extends HTMLElement {
         detail: { config: { ...currentConfig, module, vehicle_id, origin: parsePoint("origin"), destination: parsePoint("destination"), display_mode, custom_layout, sort_mode, navigation_provider, fetch_mode, visible_station_count, navigation: true, show_prices: bool("show_prices"), show_name: bool("show_name"), show_distance: bool("show_distance"), show_address: bool("show_address"), show_status: bool("show_status"), show_brand_logos: bool("show_brand_logos"), show_diagnostics: bool("show_diagnostics"), show_refresh: bool("show_refresh") } }
       }));
     };
-    editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", emit));
+    editor.querySelectorAll("select, input").forEach((element) => element.addEventListener("change", () => {
+      updateVisibility();
+      emit();
+    }));
+    Object.defineProperty(editor, "hass", {
+      configurable: true,
+      get: () => editor._hass,
+      set: (value) => {
+        editor._hass = value;
+        applyEditorLanguage();
+        if (value.callWS) void value.callWS({ type: "smartcamper_suite/journal/list_vehicles" }).then((result) => refreshVehicles(Array.isArray(result?.vehicles) ? result.vehicles : [])).catch(() => void 0);
+      }
+    });
+    refreshVehicles();
+    updateVisibility();
     return editor;
   }
   static getStubConfig() {
@@ -9865,11 +9944,14 @@ var SmartCamperCard = class extends HTMLElement {
     if (!this.isConnected && typeof document === "undefined") return;
     if (this.config.module === "travel_journal") {
       const states2 = this._hass?.states ?? {};
-      const vehicleId2 = selectVehicle(this.config, states2);
+      const vehicleId2 = selectVehicle(this.config, states2, this.vehicleProfiles);
+      const vehicleLabel2 = vehicleName(vehicleId2, this.vehicleProfiles) ?? vehicleId2;
       const sensor2 = Object.values(states2).find((state) => state.attributes?.vehicle_id === vehicleId2 && state.attributes?.database === "smartcamper_suite_travel_journal.sqlite");
       const journal = sensor2?.attributes;
       const view = journal && this.journalDetailsVehicle === vehicleId2 ? { ...journal, ...this.journalDetails } : journal;
       this.innerHTML = `<style>.journal-card{font-family:var(--primary-font-family,sans-serif);padding:12px;color:var(--primary-text-color,#263238)}.journal-card header{display:flex;gap:8px;align-items:center;margin-bottom:12px}.journal-card header small{margin-left:auto;opacity:.7}.journal-active{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--secondary-background-color,#f4f7f9)}.journal-active small,.journal-meta{opacity:.75}.journal-meta{display:block;margin-top:10px}.journal-actions,.journal-record-actions,.journal-drive-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.journal-drives,.journal-suggestions{margin-top:12px}.journal-drives ul,.journal-suggestions ul{padding-left:18px}.journal-drive-form input{min-width:95px}.journal-create,.journal-pdf,.journal-gpx-label,.journal-drive-form button,.journal-record-actions button,.journal-drives button,.journal-suggestions button,.journal-trip-actions button{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit}.journal-gpx{display:none}.journal-editor-dialog{border:0;border-radius:12px;max-width:min(520px,calc(100vw - 24px));width:100%;background:var(--card-background-color,#fff);color:var(--primary-text-color,#263238)}.journal-editor-dialog::backdrop{background:rgba(0,0,0,.45)}.journal-dialog-fields{display:grid;gap:10px}.journal-dialog-fields label{display:grid;gap:4px}.journal-dialog-fields input,.journal-dialog-fields select,.journal-dialog-fields textarea{box-sizing:border-box;width:100%;padding:7px;border:1px solid var(--divider-color,#aaa);border-radius:6px;background:var(--card-background-color,#fff);color:inherit}.journal-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.journal-dialog-error{color:var(--error-color,#d32f2f)}</style>${renderJournalHtml(view, this.config)}`;
+      const journalHeader = this.querySelector("header small");
+      if (journalHeader) journalHeader.textContent = vehicleLabel2 ?? "Kein Fahrzeug ausgew\xE4hlt";
       void this.loadJournalDetails(vehicleId2);
       this.querySelector(".journal-create")?.addEventListener("click", () => {
         if (vehicleId2) this.openJournalDialog("trip-create", vehicleId2, tripId);
@@ -9983,7 +10065,8 @@ var SmartCamperCard = class extends HTMLElement {
     if (this.config.module === "route_planner") {
       this.routeMap?.remove();
       const states2 = this._hass?.states ?? {};
-      const vehicleId2 = selectVehicle(this.config, states2);
+      const vehicleId2 = selectVehicle(this.config, states2, this.vehicleProfiles);
+      const vehicleLabel2 = vehicleName(vehicleId2, this.vehicleProfiles) ?? vehicleId2;
       const sensor2 = Object.values(states2).find((state) => state.attributes?.vehicle_id === vehicleId2 && state.attributes?.beta !== void 0);
       const route = sensor2?.attributes;
       const origin = route?.origin ?? route?.route_input?.origin ?? this.config.origin;
@@ -9994,6 +10077,8 @@ var SmartCamperCard = class extends HTMLElement {
       const navigation = buildNavigationLink(origin, destination);
       const exportButtons = route?.state === "ready" && origin && destination ? `<div class="route-actions"><button class="route-gpx" data-mode="route" type="button">GPX-Route</button><button class="route-gpx" data-mode="track" type="button">GPX-Track</button><button class="route-gpx" data-mode="combined" type="button">GPX kombiniert</button>${navigation ? `<a class="route-navigation" href="${navigation}" target="_blank" rel="noopener">Im Navi \xF6ffnen</a>` : ""}</div>` : "";
       this.innerHTML = `<style>.route-card{font-family:var(--primary-font-family,sans-serif);padding:12px}.route-leaflet-map{width:100%;height:180px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;margin-bottom:8px}.route-map{width:100%;height:120px;background:var(--secondary-background-color,#f4f7f9);border-radius:8px;cursor:crosshair}.route-warnings{padding-left:20px;color:var(--warning-color,#b26a00)}.route-error{color:var(--error-color,#d32f2f)}.route-calculate,.route-gpx,.route-actions a,.route-reset{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:6px 12px;color:inherit;text-decoration:none}.route-points{display:grid;gap:5px;margin:8px 0}.route-point{display:block}.route-point button{border:0;background:transparent;color:var(--error-color,#d32f2f);font-size:1.1rem}.route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}</style><article class="route-card"><header><strong>Camper Route Planner</strong><small>${vehicleId2 ?? "Kein Fahrzeug ausgew\xE4hlt"}</small></header><div class="route-points">${pointEditor(origin, "Start")}${via.map((point, index) => pointEditor(point, `Zwischenstopp ${index + 1}`, index)).join("")}${pointEditor(destination, "Ziel")}</div><button class="route-add" type="button">Zwischenstopp hinzuf\xFCgen</button> <button class="route-reset" type="button">Route zur\xFCcksetzen</button>${renderRouteHtml(route, this.config)}${exportButtons}${calculate}</article>`;
+      const routeHeader = this.querySelector("header small");
+      if (routeHeader) routeHeader.textContent = vehicleLabel2 ?? "Kein Fahrzeug ausgew\xE4hlt";
       this.querySelector(".route-add")?.addEventListener("click", () => {
         this.routeVia = [...via, { latitude: origin?.latitude ?? 0, longitude: origin?.longitude ?? 0 }];
         this.render();
@@ -10059,7 +10144,8 @@ var SmartCamperCard = class extends HTMLElement {
       return;
     }
     const states = this._hass?.states ?? {};
-    const vehicleId = selectVehicle(this.config, states);
+    const vehicleId = selectVehicle(this.config, states, this.vehicleProfiles);
+    const vehicleLabel = vehicleName(vehicleId, this.vehicleProfiles) ?? vehicleId;
     const sensor = Object.values(states).find((state) => state.attributes?.vehicle_id === vehicleId);
     const status = sensor?.attributes?.state;
     const stations = this.mergeStations(sensor?.attributes?.stations ?? []);
@@ -10070,7 +10156,12 @@ var SmartCamperCard = class extends HTMLElement {
     const fetchMode = sensor?.attributes?.fetch_mode ?? this.config.fetch_mode;
     const usage = sensor?.attributes?.provider_usage;
     const usageText = usage ? Object.entries(usage).map(([provider2, value]) => `${provider2}: ${value.quotas?.cheap?.remaining ?? "?"} verbleibend`).join(" \xB7 ") : "";
-    const diagnostics = this.config.show_diagnostics !== false && (sensor?.attributes?.error || usageText) ? `<p class="diagnostics" role="status">${sensor?.attributes?.error ? `Providerfehler: ${String(sensor.attributes.error)}` : ""}${usageText ? ` ${usageText}` : ""}</p>` : "";
+    const providerStatus = sensor?.attributes?.provider_status;
+    const english = this._hass?.locale?.language === "en";
+    const providerLabels = english ? { tankerkoenig: "Tankerk\xF6nig", petromap: "Petromap", nakordoni: "Nakordoni" } : { tankerkoenig: "Tankerk\xF6nig", petromap: "Petromap", nakordoni: "Nakordoni" };
+    const providerStates = english ? { not_configured: "not configured", ready: "ready", auth_error: "access denied", permission_error: "permission missing", rate_limited: "quota reached", unavailable: "unreachable" } : { not_configured: "nicht konfiguriert", ready: "bereit", auth_error: "Zugang abgelehnt", permission_error: "Berechtigung fehlt", rate_limited: "Kontingent erreicht", unavailable: "nicht erreichbar" };
+    const providerText = providerStatus ? Object.entries(providerStatus).map(([provider2, value]) => `${providerLabels[provider2] ?? provider2}: ${providerStates[value.state ?? ""] ?? "unbekannt"}`).join(" \xB7 ") : "";
+    const diagnostics = this.config.show_diagnostics !== false && (sensor?.attributes?.error || usageText || providerText) ? `<p class="diagnostics" role="status">${sensor?.attributes?.error ? `Providerfehler: ${String(sensor.attributes.error)}` : ""}${providerText ? ` ${providerText}` : ""}${usageText ? ` ${usageText}` : ""}</p>` : "";
     const lastUpdated = this.config.show_last_updated !== false && sensor?.attributes?.updated_at ? `<small class="updated">Stand: ${String(sensor.attributes.updated_at)}</small>` : "";
     const refresh = this.config.show_refresh !== false && fetchMode === "manual" ? `<button class="refresh" type="button">Jetzt aktualisieren</button>` : "";
     const headerDetails = [
@@ -10084,6 +10175,8 @@ var SmartCamperCard = class extends HTMLElement {
     const dividerClass = this.config.show_dividers === false ? " no-dividers" : "";
     const densityClass = this.config.density === "compact" ? " dense" : "";
     this.innerHTML = `<style>.fuel-card{font-family:var(--primary-font-family, sans-serif);color:var(--primary-text-color,#263238);background:var(--ha-card-background,var(--card-background-color,#fff));padding:12px;border-radius:12px}.fuel-card header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.fuel-card header strong{font-size:1.1rem}.fuel-card header small,.updated,.details{opacity:.72}.fuel-card header small{margin-right:auto}.stations{list-style:none;margin:0;padding:0;display:grid;gap:8px}.fuel-station{display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px;border-bottom:1px solid var(--divider-color,#ddd)}.fuel-station.compact{padding:4px}.fuel-station.individual{border:1px solid var(--divider-color,#ddd);border-radius:8px}.fuel-station.highlight{background:color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent)}.fuel-card.no-dividers .fuel-station{border-bottom:0}.fuel-card.dense{padding:6px}.brand-logo{width:32px;height:32px;object-fit:contain}.brand-logo-fallback{font-size:1.4rem}.station-main{min-width:0;display:grid;gap:2px}.station-main small,.meta{font-size:.85em;opacity:.78}.meta{display:flex;gap:8px;flex-wrap:wrap}.prices{white-space:nowrap}.navigate{font-size:1.35rem;text-decoration:none}.highlights{display:grid;gap:8px;margin-bottom:8px}.badge{margin-left:6px;font-size:.75em;color:var(--primary-color,#03a9f4)}.diagnostics{font-size:.85em;opacity:.8}.refresh{border:1px solid var(--primary-color,#03a9f4);border-radius:999px;background:transparent;padding:4px 10px}@media(max-width:500px){.fuel-station{grid-template-columns:30px minmax(0,1fr) auto}.fuel-station .prices{grid-column:2}.fuel-station .navigate{grid-column:3;grid-row:1 / span 2}}</style><article class="fuel-card${dividerClass}${densityClass}"><header>${this.config.show_title === false ? "" : "<strong>Tankstellen</strong>"}<small>${vehicleId ?? "Kein Fahrzeug ausgew\xE4hlt"}</small>${details}${lastUpdated}${refresh}</header>${diagnostics}<div>${stationHtml}</div></article>`;
+    const fuelHeader = this.querySelector("header small");
+    if (fuelHeader) fuelHeader.textContent = vehicleLabel ?? "Kein Fahrzeug ausgew\xE4hlt";
     this.querySelector(".refresh")?.addEventListener("click", () => {
       if (vehicleId && this._hass?.callService) void this._hass.callService("smartcamper_suite", "refresh_fuel_stations", { vehicle_id: vehicleId });
     });

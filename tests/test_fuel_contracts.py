@@ -244,6 +244,8 @@ def test_shared_account_deduplicates_concurrent_requests_and_respects_market_pol
         assert first[0].station_id == second[0].station_id == "n1"
         assert calls == 2
         assert runtime.provider_usage["nkd"].cheap_remaining == 9
+        assert runtime.provider_status["nakordoni"]["state"] == "ready"
+        assert all("secret" not in str(value).lower() for value in runtime.provider_status.values())
         await runtime.async_unload()
 
     asyncio.run(run())

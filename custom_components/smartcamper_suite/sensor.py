@@ -72,6 +72,7 @@ class FuelStationsSensor(SensorEntity):
         }
         return {
             "vehicle_id": self._vehicle_id,
+            "vehicle_name": self._runtime.fuel.vehicles[self._vehicle_id].name,
             "fuel_types": list(self._runtime.fuel.vehicles[self._vehicle_id].fuel_types or ["diesel"]),
             "radius_km": self._runtime.fuel.vehicles[self._vehicle_id].fuel_radius_km,
             "station_count": self._runtime.fuel.vehicles[self._vehicle_id].fuel_station_count,
@@ -79,6 +80,7 @@ class FuelStationsSensor(SensorEntity):
             **self._runtime.fuel.status.get(self._vehicle_id, {"state": "idle"}),
             "stations": list(station_data.values()),
             "provider_usage": provider_usage,
+            "provider_status": self._runtime.fuel.provider_status,
         }
 
     async def async_update(self) -> None:

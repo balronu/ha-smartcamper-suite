@@ -19,9 +19,8 @@ _LOGGER = logging.getLogger(__name__)
 _MODULE_KEYS = tuple(module.value for module in ModuleName)
 _PROVIDERS = ("tankerkoenig", "petromap", "nakordoni")
 _FUEL_TYPES = ("diesel", "e5", "e10", "lpg", "hvo100")
-_PROVIDER_OPTIONS = [selector.SelectOptionDict(value=key, label=label) for key, label in (
-    ("tankerkoenig", "Tankerkönig"), ("petromap", "Petromap"), ("nakordoni", "Nakordoni")
-)]
+_REFRESH_MODES = ("automatic", "movement", "manual")
+_PROVIDER_OPTIONS = list(_PROVIDERS)
 
 
 def _optional_number(value: Any) -> float | None:
@@ -76,7 +75,12 @@ def _vehicle_schema(current: Vehicle | None = None) -> vol.Schema:
 def _provider_selection_schema(current: list[str]) -> vol.Schema:
     return vol.Schema({
         vol.Required("enabled_providers", default=current): selector.SelectSelector(
-            selector.SelectSelectorConfig(options=_PROVIDER_OPTIONS, multiple=True, mode=selector.SelectSelectorMode.LIST)
+            selector.SelectSelectorConfig(
+                options=_PROVIDER_OPTIONS,
+                multiple=True,
+                mode=selector.SelectSelectorMode.LIST,
+                translation_key="enabled_providers",
+            )
         )
     })
 
@@ -93,16 +97,17 @@ def _provider_credentials_schema(enabled: list[str], *, include_oauth: bool = Tr
 
 
 def _vehicle_manager_schema(vehicles: list[dict[str, Any]]) -> vol.Schema:
-    choices = [selector.SelectOptionDict(value="add", label="Fahrzeug hinzufügen")]
+    choices = ["add"]
     if vehicles:
-        choices.extend([
-            selector.SelectOptionDict(value="edit", label="Fahrzeug bearbeiten"),
-            selector.SelectOptionDict(value="remove", label="Fahrzeug entfernen"),
-        ])
-    choices.append(selector.SelectOptionDict(value="done", label="Fertig"))
+        choices.extend(["edit", "remove"])
+    choices.append("done")
     fields: dict[Any, Any] = {
         vol.Required("action", default="add"): selector.SelectSelector(
-            selector.SelectSelectorConfig(options=choices, mode=selector.SelectSelectorMode.DROPDOWN)
+            selector.SelectSelectorConfig(
+                options=choices,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key="vehicle_action",
+            )
         )
     }
     if vehicles:
@@ -127,7 +132,13 @@ def _module_schema(current: dict[str, bool] | None = None) -> vol.Schema:
 def _common_schema(current: dict[str, Any] | None = None) -> vol.Schema:
     current = current or {}
     return vol.Schema({
-        vol.Required("refresh_mode", default=current.get("refresh_mode", "automatic")): vol.In(("automatic", "movement", "manual")),
+        vol.Required("refresh_mode", default=current.get("refresh_mode", "manual")): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=list(_REFRESH_MODES),
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key="refresh_mode",
+            )
+        ),
         vol.Required("refresh_interval_min", default=current.get("refresh_interval_min", 15)): vol.All(vol.Coerce(int), vol.Range(min=1, max=1440)),
     })
 
@@ -149,6 +160,14 @@ def _normalise_vehicle(user_input: dict[str, Any], vehicle_id: str | None = None
     )
     vehicle.validate()
     return vehicle.to_dict()
+
+
+def _apply_refresh_settings(vehicles: list[dict[str, Any]], mode: str, interval: int) -> list[dict[str, Any]]:
+    """Apply the suite refresh choice while preserving all other vehicle data."""
+    return [
+        {**vehicle, "fuel_refresh_mode": mode, "fuel_refresh_interval_min": interval}
+        for vehicle in vehicles
+    ]
 
 
 def _credentials(provider_input: dict[str, Any], enabled: list[str], existing: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -240,14 +259,24 @@ class SmartCamperConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, 
                 return await self.async_step_vehicle()
             if action == "done" and self._flow_data["vehicles"]:
                 return await self.async_step_modules()
-            if action in {"edit", "remove"}:
+            if action == "remove":
                 vehicle_id = user_input.get("vehicle_id")
-                if action == "remove":
-                    self._flow_data["vehicles"] = [item for item in self._flow_data["vehicles"] if item["vehicle_id"] != vehicle_id]
-                    return await self.async_step_vehicles()
+                self._pending_remove_vehicle_id = vehicle_id
+                return await self.async_step_remove_vehicle()
+            if action == "edit":
+                vehicle_id = user_input.get("vehicle_id")
                 self._editing_vehicle_id = vehicle_id
                 return await self.async_step_vehicle()
         return self.async_show_form(step_id="vehicles", data_schema=_vehicle_manager_schema(self._flow_data["vehicles"]))
+
+    async def async_step_remove_vehicle(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            if user_input.get("confirm"):
+                vehicle_id = getattr(self, "_pending_remove_vehicle_id", None)
+                self._flow_data["vehicles"] = [item for item in self._flow_data["vehicles"] if item["vehicle_id"] != vehicle_id]
+            self._pending_remove_vehicle_id = None
+            return await self.async_step_vehicles()
+        return self.async_show_form(step_id="remove_vehicle", data_schema=vol.Schema({vol.Required("confirm", default=False): bool}))
 
     async def async_step_vehicle(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
@@ -268,7 +297,8 @@ class SmartCamperConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, 
 
     async def async_step_common(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
-            options = {"vehicles": self._flow_data["vehicles"], "enabled_providers": self._flow_data["enabled_providers"], "provider_accounts": self._flow_data["provider_accounts"], "modules": self._flow_data["modules"], **user_input}
+            vehicles = _apply_refresh_settings(self._flow_data["vehicles"], user_input["refresh_mode"], int(user_input["refresh_interval_min"]))
+            options = {"vehicles": vehicles, "enabled_providers": self._flow_data["enabled_providers"], "provider_accounts": self._flow_data["provider_accounts"], "modules": self._flow_data["modules"], **user_input}
             data = {"credentials": self._flow_data["credentials"]}
             if self._flow_data.get("nakordoni_oauth"):
                 return await self._async_start_nakordoni_oauth({"_data": data, "_options": options})
@@ -308,12 +338,21 @@ class SmartCamperOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_modules()
             vehicle_id = user_input.get("vehicle_id")
             if action == "remove":
-                self._flow_data["vehicles"] = [item for item in self._flow_data["vehicles"] if item["vehicle_id"] != vehicle_id]
-                return await self.async_step_vehicles()
+                self._pending_remove_vehicle_id = vehicle_id
+                return await self.async_step_remove_vehicle()
             if action == "edit":
                 self._editing_vehicle_id = vehicle_id
                 return await self.async_step_vehicle()
         return self.async_show_form(step_id="vehicles", data_schema=_vehicle_manager_schema(self._flow_data["vehicles"]))
+
+    async def async_step_remove_vehicle(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            if user_input.get("confirm"):
+                vehicle_id = getattr(self, "_pending_remove_vehicle_id", None)
+                self._flow_data["vehicles"] = [item for item in self._flow_data["vehicles"] if item["vehicle_id"] != vehicle_id]
+            self._pending_remove_vehicle_id = None
+            return await self.async_step_vehicles()
+        return self.async_show_form(step_id="remove_vehicle", data_schema=vol.Schema({vol.Required("confirm", default=False): bool}))
 
     async def async_step_vehicle(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
@@ -334,7 +373,8 @@ class SmartCamperOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_common(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
-            options = {**self.config_entry.options, "vehicles": self._flow_data["vehicles"], "enabled_providers": self._flow_data["enabled_providers"], "provider_accounts": self._flow_data["provider_accounts"], "modules": self._flow_data["modules"], **user_input}
+            vehicles = _apply_refresh_settings(self._flow_data["vehicles"], user_input["refresh_mode"], int(user_input["refresh_interval_min"]))
+            options = {**self.config_entry.options, "vehicles": vehicles, "enabled_providers": self._flow_data["enabled_providers"], "provider_accounts": self._flow_data["provider_accounts"], "modules": self._flow_data["modules"], **user_input}
             self.hass.config_entries.async_update_entry(self.config_entry, data={**self.config_entry.data, "credentials": self._flow_data["credentials"]})
             return self.async_create_entry(title="", data=options)
         return self.async_show_form(step_id="common", data_schema=_common_schema(self.config_entry.options))

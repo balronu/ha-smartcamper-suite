@@ -5,10 +5,22 @@
       "providers": {"title": "Providers & API access", "description": "Enable providers independently. The same provider account can be shared by all vehicles.", "data": {"enabled_providers": "Enabled providers"}},
       "provider_credentials": {"title": "Provider credentials", "description": "Leave blank to keep the stored credential. Stored keys are never shown again.", "data": {"tankerkoenig_api_key": "Tankerkönig API key", "petromap_api_key": "Petromap API key", "nakordoni_api_key": "Nakordoni API key", "nakordoni_oauth": "Sign in to Nakordoni with OAuth"}},
       "vehicles": {"title": "Manage vehicles", "description": "Add, edit or remove vehicles without changing global provider access.", "data": {"action": "Vehicle action", "vehicle_id": "Vehicle"}},
+      "remove_vehicle": {"title": "Remove vehicle", "description": "Confirm that this vehicle should be removed. Global provider access remains unchanged.", "data": {"confirm": "Remove this vehicle"}},
       "vehicle": {"title": "Vehicle details", "description": "Choose the GPS tracker and supported fuels. Dimensions are optional.", "data": {"name": "Vehicle name", "tracker_entity_id": "GPS tracker", "length_m": "Length (m)", "width_m": "Width (m)", "height_m": "Height (m)", "weight_t": "Weight (t)", "axle_count": "Number of axles", "fuel_types": "Supported fuels"}},
       "modules": {"title": "Modules", "description": "Enable the suite modules you want to use.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
-      "common": {"title": "Refresh & general settings", "description": "Choose how often the suite refreshes its data.", "data": {"refresh_mode": "Refresh mode", "refresh_interval_min": "Refresh interval (minutes)"}}
+      "common": {"title": "Refresh & general settings", "description": "Manual refresh is the safe default for new installations.", "data": {"refresh_mode": "Refresh mode", "refresh_interval_min": "Refresh interval (minutes)"}}
     }
   },
-  "selector": {"fuel_types": {"options": {"diesel": "Diesel", "e5": "Petrol E5", "e10": "Petrol E10", "lpg": "LPG", "hvo100": "HVO100"}}}
+  "options": {
+      "step": {
+        "providers": {"title": "Providers & API access", "description": "Enable providers independently. The same provider account can be shared by all vehicles.", "data": {"enabled_providers": "Enabled providers"}},
+        "provider_credentials": {"title": "Provider credentials", "description": "Leave blank to keep the stored credential. Stored keys are never shown again.", "data": {"tankerkoenig_api_key": "Tankerkönig API key", "petromap_api_key": "Petromap API key", "nakordoni_api_key": "Nakordoni API key"}},
+        "vehicles": {"title": "Manage vehicles", "description": "Add, edit or remove vehicles without changing global provider access.", "data": {"action": "Vehicle action", "vehicle_id": "Vehicle"}},
+        "vehicle": {"title": "Vehicle details", "description": "Choose the GPS tracker and supported fuels. Dimensions are optional.", "data": {"name": "Vehicle name", "tracker_entity_id": "GPS tracker", "length_m": "Length (m)", "width_m": "Width (m)", "height_m": "Height (m)", "weight_t": "Weight (t)", "axle_count": "Number of axles", "fuel_types": "Supported fuels"}},
+        "remove_vehicle": {"title": "Remove vehicle", "description": "Confirm that this vehicle should be removed. Global provider access remains unchanged.", "data": {"confirm": "Remove this vehicle"}},
+        "modules": {"title": "Modules", "description": "Enable the suite modules you want to use.", "data": {"travel_journal": "Camper Travel Journal", "fuel_stations": "Mobile Fuel Stations", "route_planner": "Camper Route Planner"}},
+        "common": {"title": "Refresh & general settings", "description": "Manual refresh is the safe default for new installations.", "data": {"refresh_mode": "Refresh mode", "refresh_interval_min": "Refresh interval (minutes)"}}
+      }
+    },
+  "selector": {"enabled_providers": {"options": {"tankerkoenig": "Tankerkönig", "petromap": "Petromap", "nakordoni": "Nakordoni"}}, "vehicle_action": {"options": {"add": "Add vehicle", "edit": "Edit vehicle", "remove": "Remove vehicle", "done": "Done"}}, "refresh_mode": {"options": {"automatic": "Automatic", "movement": "On movement", "manual": "Manual"}}, "fuel_types": {"options": {"diesel": "Diesel", "e5": "Petrol E5", "e10": "Petrol E10", "lpg": "LPG", "hvo100": "HVO100"}}}
 }

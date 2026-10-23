@@ -26,7 +26,8 @@ class Vehicle:
     fuel_station_count: int = 5
     fuel_provider_modes: list[str] = field(default_factory=lambda: ["auto"])
     fuel_display_options: dict[str, Any] = field(default_factory=dict)
-    fuel_refresh_mode: str = "automatic"
+    # New vehicles must not start provider polling until the user opts in.
+    fuel_refresh_mode: str = "manual"
     fuel_refresh_interval_min: int = 15
     archived: bool = False
 

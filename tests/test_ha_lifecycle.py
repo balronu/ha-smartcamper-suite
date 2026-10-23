@@ -145,7 +145,8 @@ def test_options_flow_edits_and_removes_one_vehicle_without_losing_global_provid
         assert (await options.async_step_provider_credentials({}))["step_id"] == "vehicles"
         assert (await options.async_step_vehicles({"action": "edit", "vehicle_id": "first"}))["step_id"] == "vehicle"
         assert (await options.async_step_vehicle({**first, "name": "Wohnmobil XL", "axle_count": "2"}))["step_id"] == "vehicles"
-        assert (await options.async_step_vehicles({"action": "remove", "vehicle_id": "second"}))["step_id"] == "vehicles"
+        assert (await options.async_step_vehicles({"action": "remove", "vehicle_id": "second"}))["step_id"] == "remove_vehicle"
+        assert (await options.async_step_remove_vehicle({"confirm": True}))["step_id"] == "vehicles"
         assert (await options.async_step_vehicles({"action": "done"}))["step_id"] == "modules"
         assert (await options.async_step_modules(dict(DEFAULT_MODULES)))["step_id"] == "common"
         result = await options.async_step_common({"refresh_mode": "automatic", "refresh_interval_min": 15})

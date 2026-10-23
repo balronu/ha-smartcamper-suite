@@ -37,6 +37,12 @@ export type CardConfig = {
   show_warnings?: boolean;
 };
 
+export type VehicleProfile = {
+  vehicle_id: string;
+  name: string;
+  tracker_entity_id?: string | null;
+};
+
 export type RouteView = {
   vehicle_id: string;
   state?: string;
@@ -114,9 +120,18 @@ export type FuelStationView = {
 
 export const DEFAULT_LOGO_PATH = "/smartcamper_suite/logos/";
 
-export function selectVehicle(config: CardConfig, states: Record<string, { attributes?: { vehicle_id?: string } }>): string | undefined {
+export function selectVehicle(
+  config: CardConfig,
+  states: Record<string, { attributes?: { vehicle_id?: string } }>,
+  profiles: VehicleProfile[] = [],
+): string | undefined {
   if (config.vehicle_id) return config.vehicle_id;
+  if (profiles.length) return profiles[0].vehicle_id;
   return Object.values(states).find((state) => state.attributes?.vehicle_id)?.attributes?.vehicle_id;
+}
+
+export function vehicleName(vehicleId: string | undefined, profiles: VehicleProfile[]): string | undefined {
+  return profiles.find((profile) => profile.vehicle_id === vehicleId)?.name;
 }
 
 export function escapeHtml(value: string): string {

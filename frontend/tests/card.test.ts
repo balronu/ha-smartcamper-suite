@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderFuelStationsHtml, renderFuelStateHtml, selectVehicle, validateConfig } from "../src/config";
+import { renderFuelStationsHtml, renderFuelStateHtml, selectVehicle, validateConfig, vehicleName } from "../src/config";
 
 describe("SmartCamper card config", () => {
   it("accepts one known module and optional vehicle", () => {
@@ -12,6 +12,11 @@ describe("SmartCamper card config", () => {
     const states = { "sensor.womo": { attributes: { vehicle_id: "womo" } } };
     expect(selectVehicle({ type: "custom:smartcamper-card", module: "fuel_stations" }, states)).toBe("womo");
     expect(selectVehicle({ type: "custom:smartcamper-card", module: "fuel_stations", vehicle_id: "opel" }, states)).toBe("opel");
+  });
+  it("uses persisted vehicle profiles before sensor discovery and exposes the friendly name", () => {
+    const profiles = [{ vehicle_id: "womo", name: "Wohnmobil" }, { vehicle_id: "opel", name: "Opel" }];
+    expect(selectVehicle({ type: "custom:smartcamper-card", module: "fuel_stations" }, {}, profiles)).toBe("womo");
+    expect(vehicleName("opel", profiles)).toBe("Opel");
   });
   it("renders station fields and escapes untrusted station names", () => {
     const html = renderFuelStationsHtml([

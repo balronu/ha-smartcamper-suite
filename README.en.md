@@ -2,7 +2,7 @@
 
 [Deutsch](README.md) | [English](README.en.md)
 
-**Public test pre-release: `v0.3.0-beta.4` (Phase 2G candidate).**
+**Experimental test pre-release: `v0.3.0-beta.5` (Phase 2I/2J UI candidate).**
 
 The Stable integrations remain the production reference. This beta is intended
 only for an isolated, controlled Home Assistant test.
@@ -22,7 +22,7 @@ foundation for `custom:smartcamper-card`.
 
 The beta can be installed through **HACS → Integrations → Custom repositories**.
 Add `https://github.com/balronu/ha-smartcamper-suite` as an **Integration**,
-enable pre-releases, and select `v0.3.0-beta.4` once it is published. Restart Home Assistant and
+enable pre-releases, and select `v0.3.0-beta.5`. Restart Home Assistant and
 add the Suite as a separate Config Entry under **Settings → Devices & services**.
 Existing Stable integrations are not replaced or removed.
 
@@ -38,7 +38,7 @@ highlights, navigation, provider logos, diagnostics, automatic/movement-based
 refresh and manual refresh. OAuth refresh and legacy migration are tested as
 isolated candidate paths; no legacy entry is changed automatically.
 
-This remains development code: it does not open or migrate productive data,
+This remains experimental development code: it does not open or migrate productive data,
 use real credentials, perform live API calls in tests, or install anything in
 Home Assistant VM 104.
 
@@ -58,6 +58,11 @@ automatically. The Stable feature matrix and intentionally open adapters are
 documented in [docs/phase-2d-travel-journal-plan.md](docs/phase-2d-travel-journal-plan.md).
 The first isolated Home Assistant practical-test preparation is documented in
 [docs/phase-2d-home-assistant-practical-test.md](docs/phase-2d-home-assistant-practical-test.md).
+
+The required Beta5 test order is documented in
+[docs/releases/v0.3.0-beta.5.md](docs/releases/v0.3.0-beta.5.md). The real card
+picker, HA restart persistence and HACS update display still require the
+isolated manual practical test.
 
 The QA report and current merge gates are documented in
 [docs/phase-2a-qa.md](docs/phase-2a-qa.md).

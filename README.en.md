@@ -2,7 +2,12 @@
 
 [Deutsch](README.md) | [English](README.en.md)
 
-**Experimental test pre-release: `v0.3.0-beta.5` (Phase 2I/2J UI candidate).**
+> **DISCONTINUED / HISTORICAL:** SmartCamper Suite is no longer developed and
+> must not be newly installed. `v0.3.0-beta.5` is the last published
+> experimental state and is retained for archival reference only.
+
+The former test-beta documentation below describes the historical state and is
+not an installation or compatibility promise.
 
 The Stable integrations remain the production reference. This beta is intended
 only for an isolated, controlled Home Assistant test.
@@ -18,13 +23,14 @@ boundaries, credential status handling, offline-testable API policies,
 versioned isolated storage, four independent module runtimes, and the
 foundation for `custom:smartcamper-card`.
 
-### HACS test installation
+### Former HACS test installation
 
-The beta can be installed through **HACS → Integrations → Custom repositories**.
-Add `https://github.com/balronu/ha-smartcamper-suite` as an **Integration**,
-enable pre-releases, and select `v0.3.0-beta.5`. Restart Home Assistant and
-add the Suite as a separate Config Entry under **Settings → Devices & services**.
-Existing Stable integrations are not replaced or removed.
+Historically, the beta could be installed through **HACS → Integrations →
+Custom repositories**. These steps are retained only to reproduce the old
+state; new installation is not recommended. Add
+`https://github.com/balronu/ha-smartcamper-suite` as an **Integration**, enable
+pre-releases, and select `v0.3.0-beta.5`. Existing Stable integrations were not
+replaced or removed.
 
 Use only synthetic or explicitly approved provider data for the first test. A
 real legacy journal import is not part of installation; only the dry-run is
@@ -38,8 +44,9 @@ highlights, navigation, provider logos, diagnostics, automatic/movement-based
 refresh and manual refresh. OAuth refresh and legacy migration are tested as
 isolated candidate paths; no legacy entry is changed automatically.
 
-This remains experimental development code: it does not open or migrate productive data,
-use real credentials, perform live API calls in tests, or install anything in
+This was experimental development code: the archived Suite did not open or
+migrate productive data, use real credentials, perform live API calls in tests,
+or install anything in
 Home Assistant VM 104.
 
 The `route_planner` module uses the shared vehicle profiles and provides

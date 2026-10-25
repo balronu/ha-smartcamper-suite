@@ -2,7 +2,12 @@
 
 [Deutsch](README.md) | [English](README.en.md)
 
-**Experimentelle Test-Beta: `v0.3.0-beta.5` (Phase-2I/2J-UI-Kandidat).**
+> **EINGESTELLT / HISTORISCH:** SmartCamper Suite wird nicht mehr entwickelt
+> und soll nicht neu installiert werden. `v0.3.0-beta.5` ist der letzte
+> veröffentlichte experimentelle Stand und dient ausschließlich als Archiv.
+
+Die frühere Test-Beta-Dokumentation darunter beschreibt den historischen Stand
+und ist keine Installations- oder Kompatibilitätszusage.
 
 Die Stable-Integrationen bleiben die Produktionsreferenz. Diese Beta ist nur
 für einen isolierten, kontrollierten Home-Assistant-Test vorgesehen.
@@ -18,12 +23,14 @@ gemeinsame Provider- und Credential-Grenzen, offline testbare API-Pfade,
 versionierten Suite-Speicher, vier getrennte Modul-Laufzeiten und die zentrale
 Karte `custom:smartcamper-card`.
 
-## Aktueller Entwicklungsstand
+## Historischer Entwicklungsstand (nicht aktiv)
 
-### HACS-Testinstallation
+### Frühere HACS-Testinstallation
 
-Die Beta kann über **HACS → Integrationen → Benutzerdefinierte Repositories**
-installiert werden. Repository hinzufügen:
+Historisch konnte die Beta über **HACS → Integrationen → Benutzerdefinierte
+Repositories** installiert werden. Diese Schritte dienen nur der
+Reproduzierbarkeit des alten Stands; eine Neuinstallation wird nicht empfohlen.
+Repository hinzufügen:
 `https://github.com/balronu/ha-smartcamper-suite`, Typ **Integration**.
 Danach die Pre-Release-Auswahl aktivieren und `v0.3.0-beta.5` installieren.
 Nach der Installation Home Assistant neu starten und die Suite unter
@@ -43,8 +50,9 @@ automatische/bewegungsabhängige Aktualisierung und manuelle Aktualisierung.
 OAuth-Aktualisierung und Legacy-Migration sind isoliert getestet; kein Legacy-
 Entry wird automatisch verändert.
 
-Dies ist eine experimentelle kontrollierte Test-Beta und keine Stable-Version. Die Suite
-öffnet oder migriert keine produktive Datenbank, verwendet in Tests keine
+Dies war eine experimentelle kontrollierte Test-Beta und keine Stable-Version.
+Die archivierte Suite öffnete oder migrierte keine produktive Datenbank,
+verwendete in Tests keine
 echten Zugangsdaten, führt in Tests keine Live-API-Aufrufe aus und wird nicht
 auf Home-Assistant-VM 104 installiert. Die drei Stable-Integrationen bleiben
 parallel installiert.
